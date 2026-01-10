@@ -45,12 +45,15 @@ order_id INTEGER REFERENCES orders(id) ON DELETE CASCADE,
 menu_id INTEGER REFERENCES menus(id),
 quantity INTEGER DEFAULT 1,
 notes TEXT,                        -- คำอธิบายเพิ่มเติม (เผ็ดมาก, ข้าวน้อย)
-item_price DECIMAL(10, 2) NOT NULL -- ราคาสรุปต่อชิ้น (base + extras)
+item_price DECIMAL(10, 2) NOT NULL, -- ราคาสรุปต่อชิ้น (base + extras)
+is_takeaway BOOLEAN DEFAULT false,  -- ใส่กล่อง
+is_special BOOLEAN DEFAULT false    -- พิเศษ (+10฿)
 );
 
 -- 7. ตารางเก็บตัวเลือกที่ผู้ใช้เลือกจริงในออร์เดอร์นั้น
 CREATE TABLE order_item_selected_options (
 order_item_id INTEGER REFERENCES order_items(id) ON DELETE CASCADE,
 option_id INTEGER REFERENCES options(id),
+quantity INTEGER DEFAULT 1,        -- จำนวนของ option ที่เลือก
 PRIMARY KEY (order_item_id, option_id)
 );

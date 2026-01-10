@@ -171,10 +171,67 @@ const clearCart = () => {
   cart.value = []
   showCartModal.value = false
 }
+
+// Submit order to API
+const isSubmitting = ref(false)
+const orderSuccess = ref(false)
+const submittedOrderId = ref<number | null>(null)
+
+const submitOrder = async () => {
+  if (cart.value.length === 0 || isSubmitting.value) return
+  
+  isSubmitting.value = true
+  try {
+    const response = await $fetch<{ success: boolean, data: { orderId: number, message: string } }>('/api/orders', {
+      method: 'POST',
+      body: {
+        items: cart.value,
+        totalPrice: totalPrice.value,
+        location: null // สามารถเพิ่ม input โต๊ะ/สถานที่ทีหลัง
+      }
+    })
+    
+    if (response.success) {
+      submittedOrderId.value = response.data.orderId
+      orderSuccess.value = true
+      cart.value = []
+      showCartModal.value = false
+      
+      // Auto-hide success message after 5 seconds
+      setTimeout(() => {
+        orderSuccess.value = false
+        submittedOrderId.value = null
+      }, 5000)
+    }
+  } catch (error: any) {
+    console.error('Order submission failed:', error)
+    alert('เกิดข้อผิดพลาด: ' + (error.data?.message || error.message || 'ไม่ทราบสาเหตุ'))
+  } finally {
+    isSubmitting.value = false
+  }
+}
 </script>
 
 <template>
   <div class="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+    <!-- Success Toast -->
+    <Transition name="slide-up">
+      <div 
+        v-if="orderSuccess"
+        class="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-green-500 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3"
+      >
+        <span class="text-2xl">✅</span>
+        <div>
+          <p class="font-bold">สั่งอาหารสำเร็จ!</p>
+          <p class="text-sm text-green-100">Order #{{ submittedOrderId }}</p>
+        </div>
+        <button @click="orderSuccess = false" class="ml-2 text-green-200 hover:text-white">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+    </Transition>
     <!-- Header -->
     <header class="sticky top-0 z-40 bg-white/70 backdrop-blur-xl border-b border-gray-200/50 shadow-sm">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -182,7 +239,6 @@ const clearCart = () => {
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transform group-hover:-translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
-          <span class="font-medium">กลับหน้าหลัก</span>
         </NuxtLink>
         
         <div class="flex items-center gap-2">
@@ -192,7 +248,14 @@ const clearCart = () => {
           </h1>
         </div>
 
-        <div class="w-24"></div>
+        <!-- Kitchen Panel Link -->
+        <NuxtLink 
+          to="/kitchen" 
+          class="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-xl font-medium transition-all shadow-lg hover:shadow-xl"
+        >
+          <span class="text-xl">👨‍🍳</span>
+          <span class="hidden sm:inline">ครัว</span>
+        </NuxtLink>
       </div>
     </header>
 
@@ -213,10 +276,9 @@ const clearCart = () => {
               :alt="menu.name" 
               class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
             >
-            <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent"></div>
             
             <div class="absolute bottom-3 left-3">
-              <span class="text-white font-black text-2xl drop-shadow-lg">฿{{ menu.base_price }}</span>
+              <span class="text-white font-black text-2xl drop-shadow-lg bg-black/40 px-2 py-1 rounded-lg">฿{{ menu.base_price }}</span>
             </div>
 
             <!-- Cart Count Badge -->
@@ -661,15 +723,21 @@ const clearCart = () => {
               <div class="flex gap-3">
                 <button 
                   @click="clearCart"
-                  class="flex-1 py-3 rounded-2xl border-2 border-gray-200 text-gray-600 font-bold hover:bg-gray-50 active:scale-95 transition-all"
+                  :disabled="isSubmitting"
+                  class="flex-1 py-3 rounded-2xl border-2 border-gray-200 text-gray-600 font-bold hover:bg-gray-50 active:scale-95 transition-all disabled:opacity-50"
                 >
                   ยกเลิกทั้งหมด
                 </button>
                 <button 
-                  @click="showCartModal = false"
-                  class="flex-[2] py-3 rounded-2xl bg-gradient-to-r from-orange-400 to-red-500 text-white font-bold shadow-lg shadow-orange-200 hover:shadow-xl active:scale-95 transition-all"
+                  @click="submitOrder"
+                  :disabled="isSubmitting"
+                  class="flex-[2] py-3 rounded-2xl bg-gradient-to-r from-orange-400 to-red-500 text-white font-bold shadow-lg shadow-orange-200 hover:shadow-xl active:scale-95 transition-all disabled:opacity-70 flex items-center justify-center gap-2"
                 >
-                  ยืนยันสั่งอาหาร
+                  <svg v-if="isSubmitting" class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span>{{ isSubmitting ? 'กำลังสั่ง...' : 'ยืนยันสั่งอาหาร' }}</span>
                 </button>
               </div>
             </div>
