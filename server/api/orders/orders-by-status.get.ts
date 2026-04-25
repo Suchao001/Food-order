@@ -3,7 +3,7 @@ import { query } from '~/server/utils/db'
 export default defineEventHandler(async (event) => {
     try {
         const queryParams = getQuery(event)
-        const statusFilter = queryParams.status as string || 'Pending,Cooking,Ready'
+        const statusFilter = queryParams.status as string || 'Pending,Cooking,Completed'
         const statuses = statusFilter.split(',').map(s => s.trim())
 
         // Build status filter for SQL
@@ -41,7 +41,7 @@ export default defineEventHandler(async (event) => {
                 CASE o.status 
                     WHEN 'Pending' THEN 1 
                     WHEN 'Cooking' THEN 2 
-                    WHEN 'Ready' THEN 3 
+                    WHEN 'Completed' THEN 3 
                     ELSE 4
                 END,
                 o.created_at ASC,

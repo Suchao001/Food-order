@@ -5,7 +5,7 @@ export default defineEventHandler(async (event) => {
         const queryParams = getQuery(event)
         const dateFilter = queryParams.date as string || '' // Format: YYYY-MM-DD
 
-        // Build conditions - only count completed orders (Ready status)
+        // Build conditions - only count completed orders
         let whereConditions = ["o.status = 'Completed'"]
         let params: any[] = []
         let paramIndex = 1

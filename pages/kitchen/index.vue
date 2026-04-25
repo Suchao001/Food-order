@@ -148,11 +148,11 @@ async function updateStatus(orderId: number, newStatus: string) {
   }
 }
 
-// Get next status (simplified: Pending -> Cooking -> Ready only)
+// Kitchen workflow: Pending -> Cooking -> Completed
 function getNextStatus(currentStatus: string): string | null {
   const workflow: Record<string, string> = {
     'Pending': 'Cooking',
-    'Cooking': 'Ready'
+    'Cooking': 'Completed'
   }
   return workflow[currentStatus] || null
 }
