@@ -57,10 +57,16 @@ async function startPolling() {
       
       // Check for new orders
       const newOrderIds = orders.value.map((o: any) => o.id)
-      const hasNewOrders = newOrderIds.some((id: number) => !oldOrderIds.includes(id))
-      
+      const newOrders = orders.value.filter((o: any) => !oldOrderIds.includes(o.id))
+      const hasNewOrders = newOrders.length > 0
+
       if (hasNewOrders && oldOrderIds.length > 0) {
         playNotificationSound()
+        if (autoTts.value) {
+          for (const order of newOrders) {
+            speakOrder(order)
+          }
+        }
       }
       
       previousOrderIds.value = newOrderIds
@@ -68,11 +74,11 @@ async function startPolling() {
       console.error('Polling error:', err)
     } finally {
       if (isPolling.value) {
-        pollTimeout.value = setTimeout(poll, 5000)
+        pollTimeout.value = setTimeout(poll, document.hidden ? 15000 : 5000)
       }
     }
   }
-  
+
   poll()
 }
 
@@ -84,8 +90,20 @@ function stopPolling() {
   }
 }
 
+// View mode density toggle
+const viewMode = ref<'normal' | 'compact'>('normal')
+
+function setViewMode(mode: 'normal' | 'compact') {
+  viewMode.value = mode
+  localStorage.setItem('kitchen:view-mode', mode)
+}
+
 onMounted(() => {
   startPolling()
+  const saved = localStorage.getItem('kitchen:auto-tts')
+  if (saved !== null) autoTts.value = saved === 'true'
+  const savedMode = localStorage.getItem('kitchen:view-mode')
+  if (savedMode === 'compact') viewMode.value = 'compact'
 })
 
 onUnmounted(() => {
@@ -195,12 +213,10 @@ function buildItemSummary(item: any): string {
   return summary
 }
 
-// TTS using Web Speech API
+// TTS using Web Speech API — speaks one item
 function speakItem(item: any) {
   const summary = buildItemSummary(item)
-  
   if ('speechSynthesis' in window) {
-    window.speechSynthesis.cancel()
     const utterance = new SpeechSynthesisUtterance(summary)
     utterance.lang = 'th-TH'
     utterance.rate = 0.9
@@ -208,16 +224,36 @@ function speakItem(item: any) {
     window.speechSynthesis.speak(utterance)
   }
 }
+
+// Speaks ALL items in an order sequentially
+function speakOrder(order: any) {
+  if (!('speechSynthesis' in window) || !order.items?.length) return
+  window.speechSynthesis.cancel()
+  for (const item of order.items) {
+    const utterance = new SpeechSynthesisUtterance(buildItemSummary(item))
+    utterance.lang = 'th-TH'
+    utterance.rate = 0.9
+    utterance.pitch = 1
+    window.speechSynthesis.speak(utterance)
+  }
+}
+
+// Auto-TTS toggle (persisted in localStorage)
+const autoTts = ref(true)
+
+watch(autoTts, val => {
+  localStorage.setItem('kitchen:auto-tts', String(val))
+})
 </script>
 
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+  <div class="min-h-screen bg-gray-50">
     <!-- Confirm Dialog Modal -->
     <Teleport to="body">
       <Transition name="modal">
         <div v-if="showConfirmDialog" class="fixed inset-0 z-50 flex items-center justify-center p-4">
           <!-- Backdrop -->
-          <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="cancelDelete"></div>
+          <div class="absolute inset-0 bg-black/60" @click="cancelDelete"></div>
           
           <!-- Dialog -->
           <div class="relative bg-white rounded-3xl shadow-2xl p-6 max-w-sm w-full animate-bounce-in">
@@ -249,7 +285,7 @@ function speakItem(item: any) {
     </Teleport>
 
     <!-- Header -->
-    <header class="sticky top-0 z-40 bg-white/70 backdrop-blur-xl border-b border-gray-200/50">
+    <header class="sticky top-0 z-40 bg-white border-b border-gray-200">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
         <NuxtLink to="/order" class="flex items-center gap-2 text-gray-600 hover:text-orange-600 transition-colors">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -267,6 +303,16 @@ function speakItem(item: any) {
         <div class="flex items-center gap-2">
           <span v-if="pending" class="animate-pulse text-orange-500">⏳</span>
           <span v-else class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+          <!-- Density toggle -->
+          <div class="flex bg-gray-100 rounded-xl p-0.5 gap-0.5">
+            <button @click="setViewMode('normal')" class="px-2 py-1 rounded-lg text-xs transition-colors" :class="viewMode === 'normal' ? 'bg-white shadow-sm text-gray-700' : 'text-gray-400'" title="ปกติ">🔲</button>
+            <button @click="setViewMode('compact')" class="px-2 py-1 rounded-lg text-xs transition-colors" :class="viewMode === 'compact' ? 'bg-white shadow-sm text-gray-700' : 'text-gray-400'" title="กระชับ">▦</button>
+          </div>
+          <button
+            @click="autoTts = !autoTts"
+            class="px-2 py-1 rounded-lg text-xs font-medium transition-colors"
+            :class="autoTts ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'"
+          >{{ autoTts ? '🔊' : '🔇' }}</button>
           <button @click="refresh()" class="text-gray-500 hover:text-gray-700">🔄</button>
         </div>
       </div>
@@ -283,7 +329,9 @@ function speakItem(item: any) {
       </div>
 
       <!-- Orders Grid -->
-      <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <div v-else :class="viewMode === 'compact'
+        ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3'
+        : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4'">
         <div 
           v-for="(order, index) in orders" 
           :key="order.id"
@@ -311,108 +359,127 @@ function speakItem(item: any) {
 
           <!-- Order Items -->
           <div class="p-3 space-y-3">
-            <div 
-              v-for="item in order.items" 
-              :key="item.id"
-              class="rounded-2xl overflow-hidden border border-gray-100"
-            >
-              <!-- Food Image (Large, Square) -->
-              <div class="aspect-square relative bg-gray-100">
-                <img 
-                  v-if="item.image_url"
-                  :src="item.image_url" 
-                  :alt="item.menu_name" 
-                  class="w-full h-full object-cover"
-                >
-                <div v-else class="w-full h-full flex items-center justify-center text-6xl bg-gradient-to-br from-orange-100 to-orange-50">
-                  🍽️
-                </div>
-                
-                <!-- Star overlay for Special -->
-                <div 
-                  v-if="item.is_special"
-                  class="absolute top-3 left-3 w-14 h-14 bg-yellow-400 rounded-full flex items-center justify-center animate-pulse"
-                >
-                  <span class="text-3xl">⭐</span>
-                </div>
 
-                <!-- Quantity Badge -->
-                <div class="absolute top-3 right-3 bg-orange-500 text-white text-xl font-black px-4 py-2 rounded-full">
-                  x{{ item.quantity }}
+            <!-- Compact mode: text list -->
+            <template v-if="viewMode === 'compact'">
+              <div
+                v-for="item in order.items"
+                :key="item.id"
+                class="p-2 rounded-xl border border-gray-100 bg-gray-50"
+              >
+                <div class="flex items-start gap-1.5 flex-wrap">
+                  <span class="font-black text-gray-800 text-sm">{{ item.menu_name }}</span>
+                  <span class="bg-orange-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">x{{ item.quantity }}</span>
+                  <span v-if="item.protein_type && item.protein_type !== 'หมู'" class="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">{{ item.protein_type }}</span>
+                  <span v-if="item.is_special" class="text-xs bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded-full">⭐</span>
+                  <span v-if="item.is_takeaway" class="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">📦</span>
                 </div>
+                <div v-if="item.options?.length" class="flex flex-wrap gap-1 mt-1">
+                  <span v-for="opt in item.options" :key="opt.option_id" class="text-xs text-orange-600 font-medium">
+                    +{{ opt.label }}{{ opt.quantity > 1 ? ` x${opt.quantity}` : '' }}
+                  </span>
+                </div>
+                <p v-if="item.notes" class="text-xs text-yellow-700 mt-1 truncate">📝 {{ item.notes }}</p>
+              </div>
+            </template>
 
-                <!-- Options with Images -->
-                <div v-if="item.options?.length" class="absolute bottom-3 left-3 right-3 flex flex-wrap gap-2">
-                  <div 
-                    v-for="opt in item.options" 
-                    :key="opt.option_id"
-                    class="relative"
+            <!-- Normal mode: large image cards -->
+            <template v-else>
+              <div
+                v-for="item in order.items"
+                :key="item.id"
+                class="rounded-2xl overflow-hidden border border-gray-100"
+              >
+                <!-- Food Image (Large, Square) -->
+                <div class="aspect-square relative bg-gray-100">
+                  <img
+                    v-if="item.image_url"
+                    :src="item.image_url"
+                    :alt="item.menu_name"
+                    class="w-full h-full object-cover"
+                    loading="lazy"
+                    decoding="async"
                   >
-                    <div 
-                      v-if="opt.image_url"
-                      class="w-16 h-16 rounded-xl overflow-hidden border-3 border-white bg-white"
+                  <div v-else class="w-full h-full flex items-center justify-center text-6xl bg-gradient-to-br from-orange-100 to-orange-50">
+                    🍽️
+                  </div>
+
+                  <div
+                    v-if="item.is_special"
+                    class="absolute top-3 left-3 w-14 h-14 bg-yellow-400 rounded-full flex items-center justify-center animate-pulse"
+                  >
+                    <span class="text-3xl">⭐</span>
+                  </div>
+
+                  <div class="absolute top-3 right-3 bg-orange-500 text-white text-xl font-black px-4 py-2 rounded-full">
+                    x{{ item.quantity }}
+                  </div>
+
+                  <div v-if="item.options?.length" class="absolute bottom-3 left-3 right-3 flex flex-wrap gap-2">
+                    <div
+                      v-for="opt in item.options"
+                      :key="opt.option_id"
+                      class="relative"
                     >
-                      <img :src="opt.image_url" :alt="opt.label" class="w-full h-full object-cover">
-                      <div 
-                        v-if="opt.quantity > 1"
-                        class="absolute -top-1 -right-1 w-6 h-6 bg-orange-500 text-white text-xs font-bold rounded-full flex items-center justify-center"
+                      <div
+                        v-if="opt.image_url"
+                        class="w-16 h-16 rounded-xl overflow-hidden border-3 border-white bg-white"
                       >
-                        {{ opt.quantity }}
+                        <img :src="opt.image_url" :alt="opt.label" class="w-full h-full object-cover" loading="lazy" decoding="async">
+                        <div
+                          v-if="opt.quantity > 1"
+                          class="absolute -top-1 -right-1 w-6 h-6 bg-orange-500 text-white text-xs font-bold rounded-full flex items-center justify-center"
+                        >{{ opt.quantity }}</div>
                       </div>
-                    </div>
-                    <div 
-                      v-else
-                      class="w-16 h-16 rounded-xl bg-orange-100 border-3 border-white flex items-center justify-center"
-                    >
-                      <span class="text-2xl">🍳</span>
-                      <div 
-                        v-if="opt.quantity > 1"
-                        class="absolute -top-1 -right-1 w-6 h-6 bg-orange-500 text-white text-xs font-bold rounded-full flex items-center justify-center"
+                      <div
+                        v-else
+                        class="w-16 h-16 rounded-xl bg-orange-100 border-3 border-white flex items-center justify-center"
                       >
-                        {{ opt.quantity }}
+                        <span class="text-2xl">🍳</span>
+                        <div
+                          v-if="opt.quantity > 1"
+                          class="absolute -top-1 -right-1 w-6 h-6 bg-orange-500 text-white text-xs font-bold rounded-full flex items-center justify-center"
+                        >{{ opt.quantity }}</div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
-              
-              <!-- Item Details -->
-              <div class="p-3 bg-white">
-                <h4 class="font-black text-gray-800 text-xl mb-2">{{ item.menu_name }}</h4>
 
-                <div v-if="item.options?.length" class="flex flex-wrap gap-1 mb-2">
-                  <span 
-                    v-for="opt in item.options" 
-                    :key="opt.option_id"
-                    class="bg-orange-100 text-orange-700 text-sm px-2 py-0.5 rounded-full font-medium"
-                  >
-                    {{ opt.label }}<span v-if="opt.quantity > 1"> x{{ opt.quantity }}</span>
-                  </span>
-                </div>
+                <!-- Item Details -->
+                <div class="p-3 bg-white">
+                  <h4 class="font-black text-gray-800 text-xl mb-2">{{ item.menu_name }}</h4>
+                  <div v-if="item.protein_type && item.protein_type !== 'หมู'" class="mb-1">
+                    <span class="text-sm bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">{{ item.protein_type }}</span>
+                  </div>
 
-                <div class="flex flex-wrap gap-1.5">
-                  <span v-if="item.is_special" class="text-sm bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-bold">
-                    ⭐ พิเศษ
-                  </span>
-                  <span v-if="item.is_takeaway" class="text-sm bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
-                    📦 กล่อง
-                  </span>
-                </div>
+                  <div v-if="item.options?.length" class="flex flex-wrap gap-1 mb-2">
+                    <span
+                      v-for="opt in item.options"
+                      :key="opt.option_id"
+                      class="bg-orange-100 text-orange-700 text-sm px-2 py-0.5 rounded-full font-medium"
+                    >{{ opt.label }}<span v-if="opt.quantity > 1"> x{{ opt.quantity }}</span></span>
+                  </div>
 
-                <div v-if="item.notes" class="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded-xl">
-                  <p class="text-yellow-800 text-sm font-medium">📝 {{ item.notes }}</p>
+                  <div class="flex flex-wrap gap-1.5">
+                    <span v-if="item.is_special" class="text-sm bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-bold">⭐ พิเศษ</span>
+                    <span v-if="item.is_takeaway" class="text-sm bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">📦 กล่อง</span>
+                  </div>
+
+                  <div v-if="item.notes" class="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded-xl">
+                    <p class="text-yellow-800 text-sm font-medium">📝 {{ item.notes }}</p>
+                  </div>
                 </div>
               </div>
-            </div>
+            </template>
           </div>
 
           <!-- Action Buttons -->
           <div class="p-3 pt-0 flex gap-2">
-            <button 
+            <button
               v-if="order.items.length > 0"
-              @click="speakItem(order.items[0])"
+              @click="speakOrder(order)"
               class="w-16 h-14 bg-blue-500 hover:bg-blue-600 text-white rounded-2xl flex items-center justify-center transition-all active:scale-95 text-2xl"
-              title="อ่านออกเสียง"
+              title="อ่านทุกรายการ"
             >
               🔊
             </button>

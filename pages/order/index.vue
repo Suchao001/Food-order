@@ -17,6 +17,7 @@ interface CartItem {
   isTakeaway: boolean
   isSpecial: boolean
   notes: string
+  proteinType: string
 }
 
 const cart = ref<CartItem[]>([])
@@ -25,17 +26,18 @@ const cart = ref<CartItem[]>([])
 const showModal = ref(false)
 const selectedMenu = ref<any>(null)
 const optionQuantities = reactive<Record<number, number>>({})
-const dishQuantity = ref(1) // จำนวนจาน
+const dishQuantity = ref(1)
+const editingIndex = ref<number | null>(null)
 
 // Extra options
-const isTakeaway = ref(false) // ใส่กล่อง
- const isSpecial = ref(false) // พิเศษ +10฿
+const isTakeaway = ref(false)
+const isSpecial = ref(false)
 const specialPrice = 10
-const notes = ref('') // คำอธิบายเพิ่มเติม
+const notes = ref('')
 
-// Collapsible sections
-const showOptions = ref(true)
-const showNotes = ref(false)
+// Protein selector
+const proteins = ['หมู', 'หมูสับ', 'หมูชิ้น', 'ไก่']
+const selectedProtein = ref('หมู')
 
 // Quick note presets
 const quickNotes = ['เผ็ดมาก', 'เผ็ดน้อย', 'ไม่เผ็ด', 'ข้าวน้อย', 'ข้าวมาก', 'ไม่ใส่ผัก', 'ไม่ใส่หอม']
@@ -48,17 +50,39 @@ const addQuickNote = (note: string) => {
   }
 }
 
-// Open modal when clicking "Add"
+const closeModal = () => {
+  showModal.value = false
+  editingIndex.value = null
+  editingOrderItem.value = null
+  selectedMenu.value = null
+}
+
+// Add directly with defaults (no modal)
+const addDirectToCart = (menu: any) => {
+  cart.value.push({
+    menuId: menu.id,
+    menuName: menu.name,
+    basePrice: Number(menu.base_price),
+    selectedOptions: [],
+    totalPrice: Number(menu.base_price),
+    quantity: 1,
+    isTakeaway: false,
+    isSpecial: false,
+    notes: '',
+    proteinType: 'หมู'
+  })
+}
+
+// Open modal when clicking card
 const openOptionsModal = (menu: any) => {
   selectedMenu.value = menu
-  // Reset all states
   Object.keys(optionQuantities).forEach(key => delete optionQuantities[Number(key)])
   dishQuantity.value = 1
   isTakeaway.value = false
   isSpecial.value = false
   notes.value = ''
-  showOptions.value = true
-  showNotes.value = false
+  selectedProtein.value = 'หมู'
+  editingIndex.value = null
   showModal.value = true
 }
 
@@ -105,7 +129,7 @@ const decrementDish = () => {
 }
 
 // Add to cart with selected options
-const addToCart = () => {
+const addToCart = async () => {
   if (!selectedMenu.value) return
 
   const selectedOpts = options.value
@@ -117,6 +141,29 @@ const addToCart = () => {
       extraPrice: Number(opt.extra_price)
     }))
 
+  // Editing a submitted order item (from tracker panel)
+  if (editingOrderItem.value) {
+    try {
+      await $fetch(`/api/orders/items/${editingOrderItem.value.itemId}`, {
+        method: 'PATCH',
+        body: {
+          quantity: dishQuantity.value,
+          notes: notes.value,
+          proteinType: selectedProtein.value,
+          isTakeaway: isTakeaway.value,
+          isSpecial: isSpecial.value,
+          itemPrice: pricePerDish.value,
+          selectedOptions: selectedOpts
+        }
+      })
+      await refreshTracker()
+    } catch (e: any) {
+      alert('แก้ไขไม่สำเร็จ: ' + (e.data?.message || e.message || 'เกิดข้อผิดพลาด'))
+    }
+    closeModal()
+    return
+  }
+
   const newItem: CartItem = {
     menuId: selectedMenu.value.id,
     menuName: selectedMenu.value.name,
@@ -126,12 +173,35 @@ const addToCart = () => {
     quantity: dishQuantity.value,
     isTakeaway: isTakeaway.value,
     isSpecial: isSpecial.value,
-    notes: notes.value
+    notes: notes.value,
+    proteinType: selectedProtein.value
   }
 
-  cart.value.push(newItem)
-  showModal.value = false
-  selectedMenu.value = null
+  if (editingIndex.value !== null) {
+    cart.value[editingIndex.value] = newItem
+  } else {
+    cart.value.push(newItem)
+  }
+  closeModal()
+}
+
+const editCartItem = (index: number) => {
+  const item = cart.value[index]
+  const menu = menus.value.find((m: any) => m.id === item.menuId)
+  if (!menu) return
+  editingIndex.value = index
+  selectedMenu.value = menu
+  Object.keys(optionQuantities).forEach(key => delete optionQuantities[Number(key)])
+  for (const opt of item.selectedOptions) {
+    optionQuantities[opt.optionId] = opt.quantity
+  }
+  dishQuantity.value = item.quantity
+  isTakeaway.value = item.isTakeaway
+  isSpecial.value = item.isSpecial
+  notes.value = item.notes
+  selectedProtein.value = item.proteinType || 'หมู'
+  showCartModal.value = false
+  showModal.value = true
 }
 
 // Cart summary
@@ -179,7 +249,7 @@ const submittedOrderId = ref<number | null>(null)
 
 const submitOrder = async () => {
   if (cart.value.length === 0 || isSubmitting.value) return
-  
+
   isSubmitting.value = true
   try {
     const response = await $fetch<{ success: boolean, data: { orderId: number, message: string } }>('/api/orders', {
@@ -187,17 +257,18 @@ const submitOrder = async () => {
       body: {
         items: cart.value,
         totalPrice: totalPrice.value,
-        location: null // สามารถเพิ่ม input โต๊ะ/สถานที่ทีหลัง
+        location: null
       }
     })
-    
+
     if (response.success) {
+      pushSession(response.data.orderId)
+      await refreshTracker()
       submittedOrderId.value = response.data.orderId
       orderSuccess.value = true
       cart.value = []
       showCartModal.value = false
-      
-      // Auto-hide success message after 5 seconds
+
       setTimeout(() => {
         orderSuccess.value = false
         submittedOrderId.value = null
@@ -210,10 +281,139 @@ const submitOrder = async () => {
     isSubmitting.value = false
   }
 }
+
+// ─── Session Order Tracker ─────────────────────────────────────────────
+const SESSION_KEY = 'food-order:my-orders'
+const SESSION_MAX_AGE = 6 * 60 * 60 * 1000
+
+interface SessionEntry { id: number; ts: number }
+
+const mySessionIds = ref<number[]>([])
+
+function loadSession(): number[] {
+  if (!import.meta.client) return []
+  try {
+    const raw = localStorage.getItem(SESSION_KEY)
+    if (!raw) return []
+    const arr: SessionEntry[] = JSON.parse(raw)
+    const cut = Date.now() - SESSION_MAX_AGE
+    const valid = arr.filter(e => e.ts > cut)
+    localStorage.setItem(SESSION_KEY, JSON.stringify(valid))
+    return valid.map(e => e.id)
+  } catch { return [] }
+}
+
+function pushSession(id: number) {
+  if (!import.meta.client) return
+  try {
+    const raw = localStorage.getItem(SESSION_KEY)
+    const arr: SessionEntry[] = raw ? JSON.parse(raw) : []
+    const cut = Date.now() - SESSION_MAX_AGE
+    const valid = arr.filter(e => e.ts > cut && e.id !== id)
+    valid.push({ id, ts: Date.now() })
+    localStorage.setItem(SESSION_KEY, JSON.stringify(valid))
+    mySessionIds.value = valid.map(e => e.id)
+  } catch {}
+}
+
+const { data: trackerResult, refresh: refreshTracker } = await useFetch('/api/orders/by-ids', {
+  query: computed(() => ({ ids: mySessionIds.value.join(',') })),
+  server: false,
+  lazy: true,
+  watch: false
+})
+
+const trackedOrders = computed(() => (trackerResult.value?.data || []) as any[])
+const showTrackerDrawer = ref(false)
+
+let trackerPoll: ReturnType<typeof setTimeout> | null = null
+
+async function pollTracker() {
+  if (mySessionIds.value.length > 0) {
+    try { await refreshTracker() } catch {}
+  }
+  trackerPoll = setTimeout(pollTracker, 5000)
+}
+
+function getStatusLabel(status: string) {
+  const m: Record<string, string> = {
+    Pending: '⏳ รอรับออเดอร์', Cooking: '🍳 กำลังทำ',
+    Ready: '✅ พร้อมเสิร์ฟ', Completed: '🎉 เสร็จ', Cancelled: '❌ ยกเลิก'
+  }
+  return m[status] || status
+}
+
+function getStatusColor(status: string) {
+  const m: Record<string, string> = {
+    Pending: 'bg-yellow-100 text-yellow-800',
+    Cooking: 'bg-orange-100 text-orange-800',
+    Ready: 'bg-green-100 text-green-800',
+    Completed: 'bg-gray-100 text-gray-500',
+    Cancelled: 'bg-red-100 text-red-500'
+  }
+  return m[status] || 'bg-gray-100 text-gray-500'
+}
+
+// View mode density toggle
+const viewMode = ref<'normal' | 'compact'>('normal')
+
+function setViewMode(mode: 'normal' | 'compact') {
+  viewMode.value = mode
+  localStorage.setItem('order:view-mode', mode)
+}
+
+// Tracker panel open/close
+const trackerOpen = ref(true)
+
+function toggleTracker() {
+  trackerOpen.value = !trackerOpen.value
+  localStorage.setItem('order:tracker-open', String(trackerOpen.value))
+}
+
+// Filter out completed/cancelled from display
+const visibleTrackedOrders = computed(() =>
+  trackedOrders.value.filter((o: any) => !['Completed', 'Cancelled'].includes(o.status))
+)
+
+// Edit submitted order item (Pending only)
+const editingOrderItem = ref<{ itemId: number; orderId: number } | null>(null)
+
+function openTrackerItemEdit(item: any, order: any) {
+  if (order.status !== 'Pending') return
+  const menu = menus.value.find((m: any) => m.id === item.menu_id)
+  if (!menu) return
+  editingOrderItem.value = { itemId: item.id, orderId: order.id }
+  selectedMenu.value = menu
+  Object.keys(optionQuantities).forEach(key => delete optionQuantities[Number(key)])
+  for (const opt of item.options || []) {
+    optionQuantities[opt.option_id] = opt.quantity
+  }
+  dishQuantity.value = item.quantity
+  isTakeaway.value = item.is_takeaway
+  isSpecial.value = item.is_special
+  notes.value = item.notes || ''
+  selectedProtein.value = item.protein_type || 'หมู'
+  editingIndex.value = null
+  showTrackerDrawer.value = false
+  showModal.value = true
+}
+
+onMounted(() => {
+  mySessionIds.value = loadSession()
+  pollTracker()
+  const savedMode = localStorage.getItem('order:view-mode')
+  if (savedMode === 'compact') viewMode.value = 'compact'
+  const savedOpen = localStorage.getItem('order:tracker-open')
+  if (savedOpen !== null) trackerOpen.value = savedOpen !== 'false'
+})
+
+onUnmounted(() => {
+  if (trackerPoll) clearTimeout(trackerPoll)
+})
 </script>
 
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+  <div class="min-h-screen bg-gray-50">
     <!-- Success Toast -->
     <Transition name="slide-up">
       <div 
@@ -233,7 +433,7 @@ const submitOrder = async () => {
       </div>
     </Transition>
     <!-- Header -->
-    <header class="sticky top-0 z-40 bg-white/70 backdrop-blur-xl border-b border-gray-200/50 shadow-sm">
+    <header class="sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         <NuxtLink to="/" class="flex items-center gap-2 text-gray-600 hover:text-orange-600 transition-colors group">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transform group-hover:-translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -248,65 +448,87 @@ const submitOrder = async () => {
           </h1>
         </div>
 
-        <!-- Kitchen Panel Link -->
-        <NuxtLink 
-          to="/kitchen" 
-          class="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-xl font-medium transition-all shadow-lg hover:shadow-xl"
-        >
-          <span class="text-xl">👨‍🍳</span>
-          <span class="hidden sm:inline">ครัว</span>
-        </NuxtLink>
+        <div class="flex items-center gap-2">
+          <!-- Density toggle -->
+          <div class="flex bg-gray-100 rounded-xl p-0.5 gap-0.5">
+            <button @click="setViewMode('normal')" class="px-2 py-1.5 rounded-lg text-sm transition-colors" :class="viewMode === 'normal' ? 'bg-white shadow-sm text-gray-700' : 'text-gray-400'" title="ปกติ">🔲</button>
+            <button @click="setViewMode('compact')" class="px-2 py-1.5 rounded-lg text-sm transition-colors" :class="viewMode === 'compact' ? 'bg-white shadow-sm text-gray-700' : 'text-gray-400'" title="กระชับ">▦</button>
+          </div>
+          <!-- Kitchen Panel Link -->
+          <NuxtLink
+            to="/kitchen"
+            class="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-xl font-medium transition-all shadow-lg hover:shadow-xl"
+          >
+            <span class="text-xl">👨‍🍳</span>
+            <span class="hidden sm:inline">ครัว</span>
+          </NuxtLink>
+        </div>
       </div>
     </header>
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-40">
-      
+      <div :class="trackerOpen ? 'lg:grid lg:grid-cols-[1fr_300px] lg:gap-6 lg:items-start' : ''">
+      <div><!-- left column -->
+
       <!-- Menu Grid -->
-      <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-        <div 
-          v-for="menu in menus" 
-          :key="menu.id" 
-          class="bg-white rounded-3xl shadow-sm overflow-hidden flex flex-col transform transition-all duration-500 hover:shadow-2xl hover:-translate-y-2"
-          :class="{ 'ring-3 ring-orange-400 ring-offset-4 shadow-lg shadow-orange-200': getMenuCartCount(menu.id) > 0 }"
+      <div :class="viewMode === 'compact'
+        ? 'grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3'
+        : 'grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6'">
+        <div
+          v-for="menu in menus"
+          :key="menu.id"
+          @click="openOptionsModal(menu)"
+          class="relative bg-white rounded-3xl shadow-sm overflow-hidden flex flex-col cursor-pointer active:scale-[0.97] transition-transform"
+          :class="{ 'ring-2 ring-orange-400 ring-offset-2': getMenuCartCount(menu.id) > 0 }"
         >
           <!-- Image Container -->
-          <div class="aspect-square relative overflow-hidden bg-gray-100 group">
-            <img 
-              :src="menu.image_url" 
-              :alt="menu.name" 
-              class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+          <div
+            class="relative overflow-hidden bg-gray-100"
+            :class="viewMode === 'compact' ? 'aspect-[4/3]' : 'aspect-square'"
+          >
+            <img
+              :src="menu.image_url"
+              :alt="menu.name"
+              class="w-full h-full object-cover"
+              loading="lazy"
+              decoding="async"
             >
-            
-            <div class="absolute bottom-3 left-3">
-              <span class="text-white font-black text-2xl drop-shadow-lg bg-black/40 px-2 py-1 rounded-lg">฿{{ menu.base_price }}</span>
+
+            <div class="absolute bottom-2 left-2">
+              <span
+                class="text-white drop-shadow-lg bg-black/40 rounded-md"
+                :class="viewMode === 'compact' ? 'font-bold text-xs px-1.5 py-0.5' : 'font-black text-xl px-2 py-1'"
+              >฿{{ menu.base_price }}</span>
             </div>
 
             <!-- Cart Count Badge -->
-            <div 
+            <div
               v-if="getMenuCartCount(menu.id) > 0"
-              class="absolute top-3 right-3 w-10 h-10 bg-orange-500 text-white rounded-full flex items-center justify-center font-bold text-lg shadow-lg"
+              class="absolute bg-orange-500 text-white rounded-full flex items-center justify-center font-bold shadow-lg"
+              :class="viewMode === 'compact' ? 'top-1 right-1 w-5 h-5 text-xs' : 'top-3 right-3 w-10 h-10 text-lg'"
             >
               {{ getMenuCartCount(menu.id) }}
             </div>
           </div>
 
           <!-- Content -->
-          <div class="p-4 sm:p-5 flex-grow flex flex-col">
-            <h3 class="font-bold text-base sm:text-lg text-gray-800 mb-3 leading-tight line-clamp-2">{{ menu.name }}</h3>
-            
-            <div class="mt-auto">
-              <!-- Add Button (Opens Modal) -->
-              <button 
-                @click="openOptionsModal(menu)"
-                class="w-full py-3 sm:py-4 rounded-2xl bg-gradient-to-r from-orange-400 to-red-500 text-white font-bold shadow-lg shadow-orange-200 hover:shadow-xl hover:shadow-orange-300 active:scale-95 transition-all duration-300 flex items-center justify-center gap-2"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                </svg>
-                <span>เพิ่ม</span>
-              </button>
-            </div>
+          <div class="flex-grow" :class="viewMode === 'compact' ? 'p-2 pb-8' : 'p-3 sm:p-4 pb-10'">
+            <h3
+              class="font-bold text-gray-800 leading-tight line-clamp-2"
+              :class="viewMode === 'compact' ? 'text-xs' : 'text-sm sm:text-base'"
+            >{{ menu.name }}</h3>
           </div>
+
+          <!-- Add button: absolute bottom-right — adds directly with defaults -->
+          <button
+            @click.stop="addDirectToCart(menu)"
+            class="absolute bottom-2 right-2 bg-gradient-to-r from-orange-400 to-red-500 text-white shadow-md rounded-xl flex items-center justify-center"
+            :class="viewMode === 'compact' ? 'w-9 h-9' : 'w-11 h-11'"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" :class="viewMode === 'compact' ? 'h-4 w-4' : 'h-6 w-6'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
         </div>
       </div>
       
@@ -318,231 +540,296 @@ const submitOrder = async () => {
         <h3 class="text-2xl font-bold text-gray-800 mb-3">ยังไม่มีเมนูอาหาร</h3>
         <p class="text-gray-500 max-w-sm">กรุณาเพิ่มเมนูในหน้าผู้ดูแลระบบก่อน</p>
       </div>
+      </div><!-- /left column -->
+
+      <!-- Right: Order Tracker Panel (lg+ only) -->
+      <aside v-show="trackerOpen" class="hidden lg:block sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto">
+        <div class="bg-white rounded-3xl shadow-sm overflow-hidden">
+          <div class="p-3 border-b border-gray-100 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <h2 class="font-bold text-gray-800 text-sm">📋 ออเดอร์ของฉัน</h2>
+              <span v-if="visibleTrackedOrders.length" class="w-5 h-5 bg-orange-500 text-white rounded-full text-xs flex items-center justify-center font-bold">{{ visibleTrackedOrders.length }}</span>
+            </div>
+            <button @click="toggleTracker" class="w-7 h-7 bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center justify-center text-gray-500 transition-colors" title="ปิดแถบ">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+            </button>
+          </div>
+
+          <div v-if="visibleTrackedOrders.length === 0" class="p-6 text-center text-gray-400">
+            <p class="text-sm mb-1">ยังไม่มีออเดอร์</p>
+            <p class="text-xs">สั่งอาหารแล้วจะแสดงที่นี่</p>
+          </div>
+
+          <div v-else class="divide-y divide-gray-50">
+            <div v-for="order in visibleTrackedOrders" :key="order.id" class="p-3">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs text-gray-400 font-medium">#{{ order.id }}</span>
+                <span class="text-xs px-2 py-0.5 rounded-full font-medium" :class="getStatusColor(order.status)">
+                  {{ getStatusLabel(order.status) }}
+                </span>
+              </div>
+              <div class="space-y-1">
+                <div v-for="item in order.items" :key="item.id" class="flex items-center gap-1.5 text-xs text-gray-700">
+                  <span class="font-medium flex-1 truncate">{{ item.menu_name }}</span>
+                  <span class="text-gray-400 flex-shrink-0">x{{ item.quantity }}</span>
+                  <span v-if="item.protein_type && item.protein_type !== 'หมู'" class="text-amber-600 flex-shrink-0">({{ item.protein_type }})</span>
+                  <!-- Edit button (Pending only) -->
+                  <button
+                    v-if="order.status === 'Pending'"
+                    @click="openTrackerItemEdit(item, order)"
+                    class="w-5 h-5 bg-blue-100 hover:bg-blue-200 text-blue-600 rounded flex items-center justify-center flex-shrink-0 transition-colors"
+                    title="แก้ไข"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                  </button>
+                </div>
+              </div>
+              <p class="text-xs text-gray-400 mt-1.5">฿{{ Number(order.total_price).toLocaleString() }}</p>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Reopen tab (lg+, when panel is closed) -->
+      <button
+        v-show="!trackerOpen"
+        @click="toggleTracker"
+        class="hidden lg:flex fixed right-0 top-1/2 -translate-y-1/2 z-20 bg-white shadow-lg border border-gray-200 rounded-l-xl px-2 py-4 flex-col items-center gap-1.5 text-gray-500 hover:text-orange-500 hover:bg-orange-50 transition-colors"
+        title="เปิดแถบออเดอร์"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        <span class="text-xs" style="writing-mode:vertical-rl">📋 ออเดอร์</span>
+        <span v-if="visibleTrackedOrders.length" class="w-5 h-5 bg-orange-500 text-white text-xs rounded-full flex items-center justify-center font-bold">{{ visibleTrackedOrders.length }}</span>
+      </button>
+      </div><!-- /lg:grid -->
     </div>
+
+    <!-- Mobile: tracker floating button -->
+    <Transition name="slide-up">
+      <button
+        v-if="visibleTrackedOrders.length > 0"
+        @click="showTrackerDrawer = true"
+        class="fixed bottom-28 right-4 z-30 bg-gray-800 text-white w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg lg:hidden"
+      >
+        <span class="text-xl">📋</span>
+        <span class="absolute -top-1 -right-1 w-5 h-5 bg-orange-500 rounded-full text-xs flex items-center justify-center font-bold">{{ visibleTrackedOrders.length }}</span>
+      </button>
+    </Transition>
+
+    <!-- Mobile: tracker drawer -->
+    <Teleport to="body">
+      <Transition name="modal">
+        <div v-if="showTrackerDrawer" class="fixed inset-0 z-50 flex items-end justify-center lg:hidden">
+          <div class="absolute inset-0 bg-black/60" @click="showTrackerDrawer = false"></div>
+          <div class="relative bg-white w-full max-w-lg max-h-[70vh] rounded-t-3xl shadow-2xl overflow-hidden flex flex-col animate-slide-up">
+            <div class="p-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+              <h2 class="font-bold text-gray-800">📋 ออเดอร์ของฉัน</h2>
+              <button @click="showTrackerDrawer = false" class="w-8 h-8 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center text-gray-500 transition-colors">✕</button>
+            </div>
+            <div class="flex-1 overflow-y-auto">
+              <div v-if="visibleTrackedOrders.length === 0" class="p-8 text-center text-gray-400 text-sm">ยังไม่มีออเดอร์ที่กำลังดำเนินการ</div>
+              <div v-else class="divide-y divide-gray-50">
+                <div v-for="order in visibleTrackedOrders" :key="order.id" class="p-4">
+                  <div class="flex items-center justify-between mb-2">
+                    <span class="text-sm text-gray-500 font-medium">#{{ order.id }}</span>
+                    <span class="text-sm px-3 py-0.5 rounded-full font-medium" :class="getStatusColor(order.status)">
+                      {{ getStatusLabel(order.status) }}
+                    </span>
+                  </div>
+                  <div class="space-y-1.5">
+                    <div v-for="item in order.items" :key="item.id" class="flex items-center gap-2 text-sm text-gray-700">
+                      <span class="font-medium flex-1">{{ item.menu_name }}</span>
+                      <span class="text-gray-400">x{{ item.quantity }}</span>
+                      <span v-if="item.protein_type && item.protein_type !== 'หมู'" class="text-amber-600 text-xs">({{ item.protein_type }})</span>
+                      <button
+                        v-if="order.status === 'Pending'"
+                        @click="openTrackerItemEdit(item, order)"
+                        class="w-6 h-6 bg-blue-100 hover:bg-blue-200 text-blue-600 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors"
+                        title="แก้ไข"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                  <p class="text-sm text-gray-400 mt-1.5">฿{{ Number(order.total_price).toLocaleString() }}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
 
     <!-- Options Modal -->
     <Teleport to="body">
       <Transition name="modal">
-        <div 
-          v-if="showModal && selectedMenu" 
+        <div
+          v-if="showModal && selectedMenu"
           class="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
         >
           <!-- Backdrop -->
-          <div 
-            class="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            @click="showModal = false"
+          <div
+            class="absolute inset-0 bg-black/60"
+            @click="closeModal"
           ></div>
-          
-          <!-- Modal Content -->
-          <div class="relative bg-white w-full max-w-lg max-h-[90vh] rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-slide-up">
-            
-            <!-- Header with Image -->
-            <div class="relative h-48 bg-gray-100 flex-shrink-0">
-              <img 
-                :src="selectedMenu.image_url" 
-                :alt="selectedMenu.name" 
-                class="w-full h-full object-cover"
-              >
-              <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent"></div>
-              
-              <!-- Close Button -->
-              <button 
-                @click="showModal = false"
-                class="absolute top-4 right-4 w-10 h-10 bg-white/20 backdrop-blur rounded-full flex items-center justify-center text-white hover:bg-white/30 transition-colors"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-              
-              <!-- Menu Info -->
-              <div class="absolute bottom-4 left-4 right-4">
-                <h2 class="text-2xl font-black text-white drop-shadow-lg">{{ selectedMenu.name }}</h2>
-                <p class="text-white/80 text-lg">ราคาเริ่มต้น ฿{{ selectedMenu.base_price }}</p>
-              </div>
-            </div>
-            
-            <!-- Options List (Collapsible) -->
-            <div class="flex-1 overflow-y-auto p-6 space-y-4">
-              
-              <!-- Quick Checkboxes: Takeaway & Special -->
-              <div class="flex flex-wrap gap-3 mb-4">
-                <label 
-                  class="flex items-center gap-2 px-4 py-3 rounded-2xl cursor-pointer transition-all"
-                  :class="isTakeaway ? 'bg-orange-100 ring-2 ring-orange-400' : 'bg-gray-50 hover:bg-gray-100'"
-                >
-                  <input type="checkbox" v-model="isTakeaway" class="hidden">
-                  <span class="text-xl">📦</span>
-                  <span class="font-medium" :class="isTakeaway ? 'text-orange-700' : 'text-gray-700'">ใส่กล่อง</span>
-                </label>
-                
-                <label 
-                  class="flex items-center gap-2 px-4 py-3 rounded-2xl cursor-pointer transition-all"
-                  :class="isSpecial ? 'bg-orange-100 ring-2 ring-orange-400' : 'bg-gray-50 hover:bg-gray-100'"
-                >
-                  <input type="checkbox" v-model="isSpecial" class="hidden">
-                  <span class="text-xl">⭐</span>
-                  <span class="font-medium" :class="isSpecial ? 'text-orange-700' : 'text-gray-700'">พิเศษ</span>
-                  <span class="text-xs px-2 py-0.5 bg-orange-500 text-white rounded-full">+฿{{ specialPrice }}</span>
-                </label>
-              </div>
-              
-              <!-- Options Section (Collapsible) -->
-              <div class="border border-gray-200 rounded-2xl overflow-hidden">
-                <button 
-                  @click="showOptions = !showOptions"
-                  class="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
-                >
-                  <span class="font-bold text-gray-800">🍳 Options เพิ่มเติม</span>
-                  <svg 
-                    xmlns="http://www.w3.org/2000/svg" 
-                    class="h-5 w-5 text-gray-500 transition-transform" 
-                    :class="{ 'rotate-180': showOptions }"
-                    fill="none" viewBox="0 0 24 24" stroke="currentColor"
+
+          <!-- Modal Content: 2-col on sm+, single-col scroll on mobile -->
+          <div class="relative bg-white w-full max-w-5xl max-h-[95vh] sm:min-h-[75vh] rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-slide-up">
+
+            <div class="flex-1 min-h-0 overflow-y-auto sm:overflow-hidden sm:flex sm:flex-row">
+
+              <!-- LEFT: image + protein + checkboxes + qty -->
+              <div class="sm:w-[300px] sm:flex-shrink-0 sm:flex sm:flex-col sm:overflow-y-auto sm:border-r sm:border-gray-100">
+
+                <!-- Image -->
+                <div class="relative h-44 sm:h-52 bg-gray-100 flex-shrink-0">
+                  <img
+                    :src="selectedMenu.image_url"
+                    :alt="selectedMenu.name"
+                    class="w-full h-full object-cover"
                   >
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                
-                <Transition name="collapse">
-                  <div v-if="showOptions" class="p-4 space-y-3">
-                    <div v-if="options.length === 0" class="text-center py-4 text-gray-500">
-                      ไม่มี Options ให้เลือก
-                    </div>
-                    
-                    <div 
-                      v-for="option in options" 
-                      :key="option.id"
-                      class="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-xl"
-                      :class="{ 'bg-orange-50 border-orange-200': getOptionQty(option.id) > 0 }"
+                  <div class="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent"></div>
+                  <button
+                    @click="closeModal"
+                    class="absolute top-4 right-4 w-9 h-9 bg-white/20 backdrop-blur rounded-full flex items-center justify-center text-white hover:bg-white/30 transition-colors"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                  <div class="absolute bottom-4 left-4 right-12">
+                    <h2 class="text-xl font-black text-white leading-tight line-clamp-1">{{ selectedMenu.name }}</h2>
+                    <p class="text-white/80 text-base">฿{{ selectedMenu.base_price }}</p>
+                  </div>
+                </div>
+
+                <!-- Protein Selector -->
+                <div class="p-4 border-b border-gray-100">
+                  <p class="text-sm font-semibold text-gray-500 mb-3">🥩 เนื้อสัตว์</p>
+                  <div class="flex flex-wrap gap-2">
+                    <button
+                      v-for="p in proteins"
+                      :key="p"
+                      @click="selectedProtein = p"
+                      class="px-4 py-2 rounded-xl text-base font-medium transition-colors"
+                      :class="selectedProtein === p ? 'bg-orange-500 text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                    >{{ p }}</button>
+                  </div>
+                </div>
+
+                <!-- Takeaway + Special -->
+                <div class="p-4 border-b border-gray-100">
+                  <div class="flex gap-3 flex-wrap">
+                    <label
+                      class="flex items-center gap-2 px-4 py-2.5 rounded-xl cursor-pointer transition-colors text-base"
+                      :class="isTakeaway ? 'bg-orange-100 text-orange-700 ring-1 ring-orange-300' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
                     >
-                      <div class="flex items-center gap-3">
-                        <div v-if="option.image_url" class="w-10 h-10 rounded-lg overflow-hidden bg-gray-200">
-                          <img :src="option.image_url" :alt="option.label" class="w-full h-full object-cover">
-                        </div>
-                        <div v-else class="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center text-xl">
-                          🍳
-                        </div>
-                        <div>
-                          <p class="font-medium text-gray-800 text-sm">{{ option.label }}</p>
-                          <p class="text-orange-600 font-medium text-xs">+฿{{ option.extra_price }}</p>
-                        </div>
+                      <input type="checkbox" v-model="isTakeaway" class="hidden">
+                      <span>📦</span><span class="font-medium">ใส่กล่อง</span>
+                    </label>
+                    <label
+                      class="flex items-center gap-2 px-4 py-2.5 rounded-xl cursor-pointer transition-colors text-base"
+                      :class="isSpecial ? 'bg-orange-100 text-orange-700 ring-1 ring-orange-300' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                    >
+                      <input type="checkbox" v-model="isSpecial" class="hidden">
+                      <span>⭐</span><span class="font-medium">พิเศษ</span>
+                      <span class="text-sm px-2 py-0.5 bg-orange-500 text-white rounded-full">+฿10</span>
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Qty -->
+                <div class="p-5 sm:mt-auto">
+                  <div class="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                    <span class="text-gray-700 text-base font-medium">จำนวน (จาน)</span>
+                    <div class="flex items-center gap-3">
+                      <button
+                        @click="decrementDish"
+                        :disabled="dishQuantity <= 1"
+                        class="w-10 h-10 bg-white border-2 border-gray-200 rounded-xl flex items-center justify-center text-gray-600 hover:border-orange-400 hover:text-orange-500 disabled:opacity-50 disabled:cursor-not-allowed font-bold transition-colors text-lg"
+                      >−</button>
+                      <span class="w-10 text-center font-black text-xl text-gray-800">{{ dishQuantity }}</span>
+                      <button
+                        @click="incrementDish"
+                        class="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white hover:bg-orange-600 font-bold transition-colors text-lg"
+                      >+</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- RIGHT: options + notes -->
+              <div class="sm:flex-1 sm:overflow-y-auto border-t sm:border-t-0 border-gray-100">
+
+                <!-- Options (no collapse) -->
+                <div class="p-5 border-b border-gray-100">
+                  <p class="font-bold text-gray-700 text-base mb-4">🍳 Options เพิ่มเติม</p>
+                  <div v-if="options.length === 0" class="text-base text-gray-400 py-2">ไม่มี Options ให้เลือก</div>
+                  <div class="flex flex-wrap gap-2.5">
+                    <div
+                      v-for="option in options"
+                      :key="option.id"
+                      class="flex items-center gap-2 px-3 py-2 rounded-xl border transition-colors"
+                      :class="getOptionQty(option.id) > 0 ? 'bg-orange-50 border-orange-300' : 'bg-gray-50 border-gray-200'"
+                    >
+                      <div v-if="option.image_url" class="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0">
+                        <img :src="option.image_url" :alt="option.label" class="w-full h-full object-cover" loading="lazy" decoding="async">
                       </div>
-                      
-                      <!-- Quantity Controls -->
+                      <span class="text-base font-medium text-gray-700">{{ option.label }}</span>
+                      <span class="text-sm text-orange-500">+฿{{ option.extra_price }}</span>
+
                       <div v-if="getOptionQty(option.id) === 0">
-                        <button 
+                        <button
                           @click="incrementOption(option.id)"
-                          class="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center text-gray-600 hover:bg-orange-100 hover:text-orange-500 transition-colors"
+                          class="w-8 h-8 bg-gray-200 hover:bg-orange-200 rounded-lg flex items-center justify-center text-gray-600 hover:text-orange-600 transition-colors"
                         >
-                          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
                           </svg>
                         </button>
                       </div>
                       <div v-else class="flex items-center gap-1">
-                        <button 
-                          @click="decrementOption(option.id)"
-                          class="w-7 h-7 bg-white border border-orange-200 rounded-lg flex items-center justify-center text-orange-600 hover:bg-orange-50 transition-colors font-bold text-sm"
-                        >
-                          −
-                        </button>
+                        <button @click="decrementOption(option.id)" class="w-8 h-8 bg-orange-100 hover:bg-orange-200 text-orange-600 rounded-lg flex items-center justify-center font-bold text-sm transition-colors">−</button>
                         <span class="w-6 text-center font-bold text-orange-600 text-sm">{{ getOptionQty(option.id) }}</span>
-                        <button 
-                          @click="incrementOption(option.id)"
-                          class="w-7 h-7 bg-orange-500 rounded-lg flex items-center justify-center text-white hover:bg-orange-600 transition-colors font-bold text-sm"
-                        >
-                          +
-                        </button>
+                        <button @click="incrementOption(option.id)" class="w-8 h-8 bg-orange-500 hover:bg-orange-600 text-white rounded-lg flex items-center justify-center font-bold text-sm transition-colors">+</button>
                       </div>
                     </div>
                   </div>
-                </Transition>
-              </div>
-              
-              <!-- Notes Section (Collapsible) -->
-              <div class="border border-gray-200 rounded-2xl overflow-hidden">
-                <button 
-                  @click="showNotes = !showNotes"
-                  class="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
-                >
-                  <span class="font-bold text-gray-800">📝 คำอธิบายเพิ่มเติม</span>
-                  <div class="flex items-center gap-2">
-                    <span v-if="notes" class="text-xs text-orange-500 font-medium">มีแล้ว</span>
-                    <svg 
-                      xmlns="http://www.w3.org/2000/svg" 
-                      class="h-5 w-5 text-gray-500 transition-transform" 
-                      :class="{ 'rotate-180': showNotes }"
-                      fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                    >
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                    </svg>
+                </div>
+
+                <!-- Notes (no collapse) -->
+                <div class="p-5">
+                  <p class="font-bold text-gray-700 text-base mb-3">📝 คำอธิบายเพิ่มเติม</p>
+                  <div class="flex flex-wrap gap-2 mb-3">
+                    <button
+                      v-for="qn in quickNotes"
+                      :key="qn"
+                      @click="addQuickNote(qn)"
+                      class="px-3 py-1.5 bg-gray-100 hover:bg-orange-100 text-gray-700 hover:text-orange-700 rounded-full text-sm font-medium transition-colors"
+                    >{{ qn }}</button>
                   </div>
-                </button>
-                
-                <Transition name="collapse">
-                  <div v-if="showNotes" class="p-4 space-y-3">
-                    <!-- Quick Note Buttons -->
-                    <div class="flex flex-wrap gap-2">
-                      <button 
-                        v-for="qn in quickNotes" 
-                        :key="qn"
-                        @click="addQuickNote(qn)"
-                        class="px-3 py-1.5 bg-gray-100 hover:bg-orange-100 text-gray-700 hover:text-orange-700 rounded-full text-sm font-medium transition-colors"
-                      >
-                        {{ qn }}
-                      </button>
-                    </div>
-                    
-                    <!-- Text Area -->
-                    <textarea 
-                      v-model="notes"
-                      placeholder="เขียนคำอธิบายเพิ่มเติมที่นี่..."
-                      rows="2"
-                      class="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-400 focus:border-orange-400 outline-none resize-none text-gray-700"
-                    ></textarea>
-                  </div>
-                </Transition>
+                  <textarea
+                    v-model="notes"
+                    placeholder="เขียนคำอธิบายเพิ่มเติมที่นี่..."
+                    rows="4"
+                    class="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-400 focus:border-orange-400 outline-none resize-none text-gray-700 text-base"
+                  ></textarea>
+                </div>
+
               </div>
-              
             </div>
-            
-            <!-- Footer with Quantity & Price -->
-            <div class="flex-shrink-0 p-6 bg-white border-t border-gray-100">
-              <!-- Dish Quantity Selector -->
-              <div class="flex items-center justify-between mb-4 p-3 bg-gray-50 rounded-2xl">
-                <span class="text-gray-700 font-medium">จำนวน (จาน)</span>
-                <div class="flex items-center gap-3">
-                  <button 
-                    @click="decrementDish"
-                    :disabled="dishQuantity <= 1"
-                    class="w-10 h-10 bg-white border-2 border-gray-200 rounded-xl flex items-center justify-center text-gray-600 hover:border-orange-400 hover:text-orange-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-bold text-xl"
-                  >
-                    −
-                  </button>
-                  <span class="w-10 text-center font-black text-xl text-gray-800">{{ dishQuantity }}</span>
-                  <button 
-                    @click="incrementDish"
-                    class="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white hover:bg-orange-600 transition-colors font-bold text-xl"
-                  >
-                    +
-                  </button>
-                </div>
+
+            <!-- Modal footer: price + CTA at right -->
+            <div class="flex-shrink-0 border-t border-gray-100 px-6 py-4 flex items-center justify-between gap-4 bg-white">
+              <div>
+                <p class="text-gray-400 text-sm">฿{{ pricePerDish }} × {{ dishQuantity }} จาน</p>
+                <p class="text-3xl font-black text-orange-600">฿{{ currentItemPrice.toLocaleString() }}</p>
               </div>
-              
-              <!-- Price Summary -->
-              <div class="flex items-center justify-between mb-4">
-                <div>
-                  <span class="text-gray-500 text-sm">฿{{ pricePerDish }} x {{ dishQuantity }} จาน</span>
-                </div>
-                <span class="text-3xl font-black text-orange-600">฿{{ currentItemPrice.toLocaleString() }}</span>
-              </div>
-              
-              <button 
+              <button
                 @click="addToCart"
-                class="w-full py-4 rounded-2xl bg-gradient-to-r from-orange-400 to-red-500 text-white font-bold text-lg shadow-lg shadow-orange-200 hover:shadow-xl active:scale-95 transition-all"
+                class="px-8 py-4 rounded-2xl bg-gradient-to-r from-orange-400 to-red-500 text-white text-lg font-bold shadow-lg shadow-orange-200 active:scale-95 transition-transform flex-shrink-0"
               >
-                เพิ่มรายการ ({{ dishQuantity }} จาน)
+                {{ editingOrderItem ? 'บันทึก (ออเดอร์ที่สั่ง)' : editingIndex !== null ? 'บันทึกการแก้ไข' : `เพิ่ม ${dishQuantity} จาน` }}
               </button>
             </div>
           </div>
@@ -558,10 +845,10 @@ const submitOrder = async () => {
       >
         <div 
           @click="showCartModal = true"
-          class="bg-gradient-to-r from-orange-500 to-red-500 rounded-3xl p-4 sm:p-5 shadow-2xl shadow-orange-500/40 flex items-center justify-between gap-4 text-white cursor-pointer hover:shadow-3xl transition-shadow"
+          class="bg-gradient-to-r from-orange-500 to-red-500 rounded-3xl p-4 sm:p-5 shadow-xl flex items-center justify-between gap-4 text-white cursor-pointer"
         >
           <div class="flex items-center gap-4">
-            <div class="w-14 h-14 bg-white/20 backdrop-blur rounded-2xl flex items-center justify-center">
+            <div class="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center">
               <span class="text-3xl">🍽️</span>
             </div>
             <div>
@@ -589,7 +876,7 @@ const submitOrder = async () => {
         >
           <!-- Backdrop -->
           <div 
-            class="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            class="absolute inset-0 bg-black/60"
             @click="showCartModal = false"
           ></div>
           
@@ -619,94 +906,73 @@ const submitOrder = async () => {
                 <p>ยังไม่มีรายการสั่ง</p>
               </div>
               
-              <div 
-                v-for="(item, index) in cart" 
+              <div
+                v-for="(item, index) in cart"
                 :key="index"
-                class="bg-gray-50 rounded-2xl p-4"
+                class="bg-gray-50 rounded-2xl p-3"
               >
-                <div class="flex items-start justify-between gap-3">
-                  <div class="flex-1">
-                    <h3 class="font-bold text-gray-800 text-lg">{{ item.menuName }}</h3>
-                    
-                    <!-- Base Price -->
-                    <p class="text-gray-500 text-sm mt-1">ราคาพื้นฐาน: ฿{{ item.basePrice }}</p>
-                    
-                    <!-- Selected Options -->
-                    <div v-if="item.selectedOptions.length > 0" class="mt-2 space-y-1">
-                      <div class="flex flex-wrap gap-1">
-                        <span 
-                          v-for="opt in item.selectedOptions" 
-                          :key="opt.optionId"
-                          class="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full flex items-center gap-1"
-                        >
-                          <span>{{ opt.label }}</span>
-                          <span class="text-orange-500">x{{ opt.quantity }}</span>
-                          <span class="text-orange-400">(+฿{{ opt.extraPrice * opt.quantity }})</span>
-                        </span>
-                      </div>
+                <div class="flex items-start justify-between gap-2">
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <h3 class="font-bold text-gray-800">{{ item.menuName }}</h3>
+                      <span class="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">{{ item.proteinType || 'หมู' }}</span>
                     </div>
-                    
-                    <!-- Extra Info: Takeaway, Special, Notes -->
-                    <div class="mt-2 flex flex-wrap gap-1.5">
-                      <span v-if="item.isTakeaway" class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full flex items-center gap-1">
-                        📦 ใส่กล่อง
-                      </span>
-                      <span v-if="item.isSpecial" class="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full flex items-center gap-1">
-                        ⭐ พิเศษ (+฿10)
-                      </span>
+
+                    <!-- Options + flags inline -->
+                    <div class="mt-1.5 flex flex-wrap gap-1">
+                      <span
+                        v-for="opt in item.selectedOptions"
+                        :key="opt.optionId"
+                        class="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full"
+                      >{{ opt.label }}{{ opt.quantity > 1 ? ` x${opt.quantity}` : '' }}</span>
+                      <span v-if="item.isTakeaway" class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">📦 ใส่กล่อง</span>
+                      <span v-if="item.isSpecial" class="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">⭐ พิเศษ</span>
                     </div>
-                    
+
                     <!-- Notes -->
-                    <div v-if="item.notes" class="mt-2 p-2 bg-gray-100 rounded-lg">
-                      <p class="text-xs text-gray-600">
-                        <span class="font-medium">📝 หมายเหตุ:</span> {{ item.notes }}
-                      </p>
-                    </div>
-                    
-                    <!-- Price Breakdown -->
-                    <div class="mt-3 pt-2 border-t border-gray-100">
-                      <div class="flex items-center justify-between">
-                        <span class="text-sm text-gray-500">ราคาต่อจาน</span>
-                        <span class="text-orange-600 font-bold text-lg">฿{{ item.totalPrice }}</span>
-                      </div>
-                    </div>
+                    <p v-if="item.notes" class="mt-1 text-xs text-gray-500 truncate">📝 {{ item.notes }}</p>
+
+                    <!-- Price -->
+                    <p class="mt-1.5 text-sm text-gray-500">฿{{ item.totalPrice }} x {{ item.quantity }} = <span class="font-bold text-orange-600">฿{{ (item.totalPrice * item.quantity).toLocaleString() }}</span></p>
                   </div>
-                  
-                  <!-- Remove Button -->
-                  <button 
-                    @click="removeCartItem(index)"
-                    class="w-8 h-8 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg flex items-center justify-center transition-colors"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
+
+                  <!-- Edit + Remove buttons -->
+                  <div class="flex gap-1 flex-shrink-0">
+                    <button
+                      @click="editCartItem(index)"
+                      class="w-8 h-8 bg-blue-100 hover:bg-blue-200 text-blue-600 rounded-lg flex items-center justify-center transition-colors"
+                      title="แก้ไข"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    </button>
+                    <button
+                      @click="removeCartItem(index)"
+                      class="w-8 h-8 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg flex items-center justify-center transition-colors"
+                      title="ลบ"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
-                
+
                 <!-- Quantity Controls -->
-                <div class="flex items-center justify-between mt-3 pt-3 border-t border-gray-200">
-                  <span class="text-gray-600 text-sm">จำนวน</span>
-                  <div class="flex items-center gap-2">
-                    <button 
+                <div class="flex items-center justify-between mt-2 pt-2 border-t border-gray-200">
+                  <span class="text-gray-500 text-xs">จำนวน</span>
+                  <div class="flex items-center gap-1.5">
+                    <button
                       @click="decrementCartItem(index)"
-                      class="w-9 h-9 bg-white border border-gray-200 rounded-lg flex items-center justify-center text-gray-600 hover:border-orange-400 hover:text-orange-500 transition-colors font-bold"
-                    >
-                      −
-                    </button>
-                    <span class="w-10 text-center font-bold text-gray-800">{{ item.quantity }}</span>
-                    <button 
+                      class="w-7 h-7 bg-white border border-gray-200 rounded-lg flex items-center justify-center text-gray-600 hover:border-orange-400 hover:text-orange-500 transition-colors font-bold text-sm"
+                    >−</button>
+                    <span class="w-8 text-center font-bold text-gray-800 text-sm">{{ item.quantity }}</span>
+                    <button
                       @click="incrementCartItem(index)"
-                      class="w-9 h-9 bg-orange-500 rounded-lg flex items-center justify-center text-white hover:bg-orange-600 transition-colors font-bold"
-                    >
-                      +
-                    </button>
+                      class="w-7 h-7 bg-orange-500 rounded-lg flex items-center justify-center text-white hover:bg-orange-600 transition-colors font-bold text-sm"
+                    >+</button>
                   </div>
-                </div>
-                
-                <!-- Item Total -->
-                <div class="flex items-center justify-between mt-2">
-                  <span class="text-gray-500 text-sm">รวม</span>
-                  <span class="font-black text-orange-600">฿{{ (item.totalPrice * item.quantity).toLocaleString() }}</span>
                 </div>
               </div>
             </div>
@@ -757,51 +1023,25 @@ const submitOrder = async () => {
 
 .modal-enter-active,
 .modal-leave-active {
-  transition: opacity 0.3s ease;
+  transition: opacity 0.15s ease;
 }
 .modal-enter-active .animate-slide-up,
 .modal-leave-active .animate-slide-up {
-  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
-
 .modal-enter-from,
-.modal-leave-to {
-  opacity: 0;
-}
-.modal-enter-from .animate-slide-up {
-  transform: translateY(100%);
-}
-.modal-leave-to .animate-slide-up {
-  transform: translateY(100%);
-}
+.modal-leave-to { opacity: 0; }
+.modal-enter-from .animate-slide-up,
+.modal-leave-to .animate-slide-up { transform: translateY(100%); }
 
 .slide-up-enter-active,
 .slide-up-leave-active {
-  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.2s ease;
 }
-
 .slide-up-enter-from,
 .slide-up-leave-to {
   opacity: 0;
-  transform: translateX(-50%) translateY(100%);
+  transform: translateX(-50%) translateY(1rem);
 }
 
-.collapse-enter-active,
-.collapse-leave-active {
-  transition: all 0.3s ease;
-  overflow: hidden;
-}
-
-.collapse-enter-from,
-.collapse-leave-to {
-  opacity: 0;
-  max-height: 0;
-  padding-top: 0;
-  padding-bottom: 0;
-}
-
-.collapse-enter-to,
-.collapse-leave-from {
-  max-height: 500px;
-}
 </style>
