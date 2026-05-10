@@ -237,9 +237,12 @@ const removeCartItem = (index: number) => {
   }
 }
 
+const confirmClearCart = ref(false)
+
 const clearCart = () => {
   cart.value = []
   showCartModal.value = false
+  confirmClearCart.value = false
 }
 
 // Submit order to API
@@ -867,6 +870,28 @@ onUnmounted(() => {
       </div>
     </Transition>
 
+    <!-- Confirm Clear Cart Dialog -->
+    <Teleport to="body">
+      <Transition name="modal">
+        <div v-if="confirmClearCart" class="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div class="absolute inset-0 bg-black/60" @click="confirmClearCart = false"></div>
+          <div class="relative bg-white rounded-3xl shadow-xl p-6 max-w-sm w-full">
+            <div class="text-center">
+              <div class="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <span class="text-2xl">🗑️</span>
+              </div>
+              <h3 class="text-lg font-bold text-gray-800 mb-1">ยกเลิกทั้งหมด?</h3>
+              <p class="text-gray-500 text-sm mb-5">รายการทั้งหมดจะถูกลบออก</p>
+              <div class="flex gap-3">
+                <button @click="confirmClearCart = false" class="flex-1 py-3 rounded-2xl border-2 border-gray-200 text-gray-600 font-bold">ไม่ลบ</button>
+                <button @click="clearCart" class="flex-1 py-3 rounded-2xl bg-red-500 text-white font-bold">ลบเลย</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
     <!-- Cart Modal -->
     <Teleport to="body">
       <Transition name="modal">
@@ -987,8 +1012,8 @@ onUnmounted(() => {
               
               <!-- Action Buttons -->
               <div class="flex gap-3">
-                <button 
-                  @click="clearCart"
+                <button
+                  @click="confirmClearCart = true"
                   :disabled="isSubmitting"
                   class="flex-1 py-3 rounded-2xl border-2 border-gray-200 text-gray-600 font-bold hover:bg-gray-50 active:scale-95 transition-all disabled:opacity-50"
                 >

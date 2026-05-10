@@ -3,15 +3,20 @@ import { query } from '~/server/utils/db'
 export default defineEventHandler(async (event) => {
     try {
         const queryParams = getQuery(event)
-        const statusFilter = queryParams.status as string || 'Pending,Cooking,Completed'
-        const statuses = statusFilter.split(',').map(s => s.trim())
+        const idsParam = queryParams.ids as string || ''
+        if (!idsParam.trim()) {
+            return { success: true, data: [] }
+        }
 
-        // Build status filter for SQL
-        const statusPlaceholders = statuses.map((_, i) => `$${i + 1}`).join(', ')
+        const ids = idsParam.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0)
+        if (ids.length === 0) {
+            return { success: true, data: [] }
+        }
 
-        // Optimized single query to fetch orders with all related data
+        const placeholders = ids.map((_, i) => `$${i + 1}`).join(', ')
+
         const result = await query(`
-            SELECT 
+            SELECT
                 o.id as order_id,
                 o.status as order_status,
                 o.location,
@@ -27,29 +32,18 @@ export default defineEventHandler(async (event) => {
                 oi.protein_type,
                 m.id as menu_id,
                 m.name as menu_name,
-                m.image_url as menu_image_url,
                 oiso.quantity as option_quantity,
                 opts.id as option_id,
-                opts.label as option_label,
-                opts.image_url as option_image_url
+                opts.label as option_label
             FROM orders o
             LEFT JOIN order_items oi ON o.id = oi.order_id
             LEFT JOIN menus m ON oi.menu_id = m.id
             LEFT JOIN order_item_selected_options oiso ON oi.id = oiso.order_item_id
             LEFT JOIN options opts ON oiso.option_id = opts.id
-            WHERE o.status IN (${statusPlaceholders})
-            ORDER BY 
-                CASE o.status 
-                    WHEN 'Pending' THEN 1 
-                    WHEN 'Cooking' THEN 2 
-                    WHEN 'Completed' THEN 3 
-                    ELSE 4
-                END,
-                o.created_at ASC,
-                oi.id ASC
-        `, statuses)
+            WHERE o.id IN (${placeholders})
+            ORDER BY o.created_at DESC, oi.id ASC
+        `, ids)
 
-        // Group the flat results into nested objects
         const ordersMap = new Map()
 
         for (const row of result.rows) {
@@ -74,7 +68,6 @@ export default defineEventHandler(async (event) => {
                         id: row.item_id,
                         menu_id: row.menu_id,
                         menu_name: row.menu_name,
-                        image_url: row.menu_image_url,
                         quantity: row.item_quantity,
                         notes: row.item_notes,
                         item_price: row.item_price,
@@ -90,8 +83,7 @@ export default defineEventHandler(async (event) => {
                     item.options.push({
                         option_id: row.option_id,
                         label: row.option_label,
-                        quantity: row.option_quantity,
-                        image_url: row.option_image_url
+                        quantity: row.option_quantity
                     })
                 }
             }
@@ -102,7 +94,7 @@ export default defineEventHandler(async (event) => {
             data: Array.from(ordersMap.values())
         }
     } catch (error: any) {
-        console.error('Get orders by status error:', error)
+        console.error('Get orders by ids error:', error)
         throw createError({
             statusCode: 500,
             message: error.message || 'เกิดข้อผิดพลาดในการดึงข้อมูล orders'
