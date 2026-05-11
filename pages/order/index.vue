@@ -357,6 +357,16 @@ function getStatusColor(status: string) {
   return m[status] || 'bg-gray-100 text-gray-500'
 }
 
+// Modal compact-height toggle (localStorage persisted)
+const modalCompact = ref(false)
+
+function toggleModalCompact() {
+  modalCompact.value = !modalCompact.value
+  if (import.meta.client) {
+    localStorage.setItem('order:modal-compact', String(modalCompact.value))
+  }
+}
+
 // View mode density toggle
 const viewMode = ref<'normal' | 'compact'>('normal')
 
@@ -408,6 +418,8 @@ onMounted(() => {
   if (savedMode === 'compact') viewMode.value = 'compact'
   const savedOpen = localStorage.getItem('order:tracker-open')
   if (savedOpen !== null) trackerOpen.value = savedOpen !== 'false'
+  const savedModalCompact = localStorage.getItem('order:modal-compact')
+  if (savedModalCompact === 'true') modalCompact.value = true
 })
 
 onUnmounted(() => {
@@ -677,162 +689,170 @@ onUnmounted(() => {
           ></div>
 
           <!-- Modal Content: 2-col on sm+, single-col scroll on mobile -->
-          <div class="relative bg-white w-full max-w-5xl max-h-[95vh] sm:min-h-[75vh] rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-slide-up">
+          <div
+            class="relative bg-white w-full max-w-5xl rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-slide-up transition-all duration-300"
+            :class="modalCompact ? 'max-h-[65vh]' : 'max-h-[92vh] sm:max-h-[88vh]'"
+          >
 
-            <div class="flex-1 min-h-0 overflow-y-auto sm:overflow-hidden sm:flex sm:flex-row">
+            <!-- Close button: top-right corner of modal -->
+            <button
+              @click="closeModal"
+              class="absolute top-3 right-3 z-10 w-8 h-8 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center text-gray-500 transition-colors shadow-sm"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
 
-              <!-- LEFT: image + protein + checkboxes + qty -->
-              <div class="sm:w-[300px] sm:flex-shrink-0 sm:flex sm:flex-col sm:overflow-y-auto sm:border-r sm:border-gray-100">
+            <!-- 2-col body -->
+            <div class="flex-1 min-h-0 flex flex-col sm:flex-row overflow-hidden">
 
-                <!-- Image -->
-                <div class="relative h-44 sm:h-52 bg-gray-100 flex-shrink-0">
-                  <img
-                    :src="selectedMenu.image_url"
-                    :alt="selectedMenu.name"
-                    class="w-full h-full object-cover"
-                  >
-                  <div class="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent"></div>
-                  <button
-                    @click="closeModal"
-                    class="absolute top-4 right-4 w-9 h-9 bg-white/20 backdrop-blur rounded-full flex items-center justify-center text-white hover:bg-white/30 transition-colors"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                  <div class="absolute bottom-4 left-4 right-12">
-                    <h2 class="text-xl font-black text-white leading-tight line-clamp-1">{{ selectedMenu.name }}</h2>
-                    <p class="text-white/80 text-base">฿{{ selectedMenu.base_price }}</p>
-                  </div>
-                </div>
-
-                <!-- Protein Selector -->
-                <div class="p-4 border-b border-gray-100">
-                  <p class="text-sm font-semibold text-gray-500 mb-3">🥩 เนื้อสัตว์</p>
-                  <div class="flex flex-wrap gap-2">
-                    <button
-                      v-for="p in proteins"
-                      :key="p"
-                      @click="selectedProtein = p"
-                      class="px-4 py-2 rounded-xl text-base font-medium transition-colors"
-                      :class="selectedProtein === p ? 'bg-orange-500 text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
-                    >{{ p }}</button>
-                  </div>
-                </div>
-
-                <!-- Takeaway + Special -->
-                <div class="p-4 border-b border-gray-100">
-                  <div class="flex gap-3 flex-wrap">
-                    <label
-                      class="flex items-center gap-2 px-4 py-2.5 rounded-xl cursor-pointer transition-colors text-base"
-                      :class="isTakeaway ? 'bg-orange-100 text-orange-700 ring-1 ring-orange-300' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
-                    >
-                      <input type="checkbox" v-model="isTakeaway" class="hidden">
-                      <span>📦</span><span class="font-medium">ใส่กล่อง</span>
-                    </label>
-                    <label
-                      class="flex items-center gap-2 px-4 py-2.5 rounded-xl cursor-pointer transition-colors text-base"
-                      :class="isSpecial ? 'bg-orange-100 text-orange-700 ring-1 ring-orange-300' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
-                    >
-                      <input type="checkbox" v-model="isSpecial" class="hidden">
-                      <span>⭐</span><span class="font-medium">พิเศษ</span>
-                      <span class="text-sm px-2 py-0.5 bg-orange-500 text-white rounded-full">+฿10</span>
-                    </label>
-                  </div>
-                </div>
-
-                <!-- Qty -->
-                <div class="p-5 sm:mt-auto">
-                  <div class="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                    <span class="text-gray-700 text-base font-medium">จำนวน (จาน)</span>
-                    <div class="flex items-center gap-3">
-                      <button
-                        @click="decrementDish"
-                        :disabled="dishQuantity <= 1"
-                        class="w-10 h-10 bg-white border-2 border-gray-200 rounded-xl flex items-center justify-center text-gray-600 hover:border-orange-400 hover:text-orange-500 disabled:opacity-50 disabled:cursor-not-allowed font-bold transition-colors text-lg"
-                      >−</button>
-                      <span class="w-10 text-center font-black text-xl text-gray-800">{{ dishQuantity }}</span>
-                      <button
-                        @click="incrementDish"
-                        class="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white hover:bg-orange-600 font-bold transition-colors text-lg"
-                      >+</button>
-                    </div>
+              <!-- LEFT: image strip (full height on sm+) -->
+              <div class="sm:w-[150px] flex-shrink-0 relative sm:border-r border-gray-100">
+                <div class="h-28 sm:h-full sm:absolute sm:inset-0 bg-gray-100">
+                  <img :src="selectedMenu.image_url" :alt="selectedMenu.name" class="w-full h-full object-cover">
+                  <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/5 to-transparent"></div>
+                  <div class="absolute bottom-2.5 left-2.5 right-2.5">
+                    <p class="text-white font-black text-sm leading-tight line-clamp-2">{{ selectedMenu.name }}</p>
+                    <p class="text-white/70 text-xs mt-0.5">฿{{ selectedMenu.base_price }}</p>
                   </div>
                 </div>
               </div>
 
-              <!-- RIGHT: options + notes -->
-              <div class="sm:flex-1 sm:overflow-y-auto border-t sm:border-t-0 border-gray-100">
+              <!-- RIGHT: all controls, scrollable -->
+              <div class="flex-1 overflow-y-auto min-h-0">
 
-                <!-- Options (no collapse) -->
-                <div class="p-5 border-b border-gray-100">
-                  <p class="font-bold text-gray-700 text-base mb-4">🍳 Options เพิ่มเติม</p>
-                  <div v-if="options.length === 0" class="text-base text-gray-400 py-2">ไม่มี Options ให้เลือก</div>
-                  <div class="flex flex-wrap gap-2.5">
+                <!-- Protein + Takeaway/Special -->
+                <div class="px-4 py-3 border-b border-gray-100">
+                  <div class="flex flex-wrap gap-2">
+                    <span class="self-center text-sm text-gray-400">🥩</span>
+                    <button
+                      v-for="p in proteins"
+                      :key="p"
+                      @click="selectedProtein = p"
+                      class="px-3.5 py-2 rounded-xl text-sm font-semibold transition-colors"
+                      :class="selectedProtein === p ? 'bg-orange-500 text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                    >{{ p }}</button>
+                    <div class="w-px bg-gray-200 self-stretch mx-0.5"></div>
+                    <label
+                      class="flex items-center gap-1.5 px-3.5 py-2 rounded-xl cursor-pointer transition-colors text-sm font-semibold"
+                      :class="isTakeaway ? 'bg-orange-100 text-orange-700 ring-1 ring-orange-300' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                    >
+                      <input type="checkbox" v-model="isTakeaway" class="hidden">
+                      <span>📦</span><span>ใส่กล่อง</span>
+                    </label>
+                    <label
+                      class="flex items-center gap-1.5 px-3.5 py-2 rounded-xl cursor-pointer transition-colors text-sm font-semibold"
+                      :class="isSpecial ? 'bg-orange-100 text-orange-700 ring-1 ring-orange-300' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                    >
+                      <input type="checkbox" v-model="isSpecial" class="hidden">
+                      <span>⭐</span><span>พิเศษ</span>
+                      <span class="text-[11px] px-1.5 py-0.5 bg-orange-500 text-white rounded-full">+฿10</span>
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Options -->
+                <div class="px-4 py-3 border-b border-gray-100">
+                  <p class="text-xs font-semibold text-gray-400 mb-2.5">🍳 Options เพิ่มเติม</p>
+                  <div v-if="options.length === 0" class="text-sm text-gray-400">ไม่มี Options ให้เลือก</div>
+                  <div class="flex flex-wrap gap-2">
                     <div
                       v-for="option in options"
                       :key="option.id"
-                      class="flex items-center gap-2 px-3 py-2 rounded-xl border transition-colors"
-                      :class="getOptionQty(option.id) > 0 ? 'bg-orange-50 border-orange-300' : 'bg-gray-50 border-gray-200'"
+                      @click="getOptionQty(option.id) === 0 && incrementOption(option.id)"
+                      class="flex items-center gap-2 px-3 py-2.5 rounded-xl border transition-colors select-none"
+                      :class="getOptionQty(option.id) > 0
+                        ? 'bg-orange-50 border-orange-300'
+                        : 'bg-gray-50 border-gray-200 cursor-pointer hover:bg-orange-50 hover:border-orange-200 active:scale-[0.97]'"
                     >
-                      <div v-if="option.image_url" class="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0">
+                      <div v-if="option.image_url" class="w-7 h-7 rounded-lg overflow-hidden flex-shrink-0">
                         <img :src="option.image_url" :alt="option.label" class="w-full h-full object-cover" loading="lazy" decoding="async">
                       </div>
-                      <span class="text-base font-medium text-gray-700">{{ option.label }}</span>
-                      <span class="text-sm text-orange-500">+฿{{ option.extra_price }}</span>
-
-                      <div v-if="getOptionQty(option.id) === 0">
-                        <button
-                          @click="incrementOption(option.id)"
-                          class="w-8 h-8 bg-gray-200 hover:bg-orange-200 rounded-lg flex items-center justify-center text-gray-600 hover:text-orange-600 transition-colors"
-                        >
-                          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
-                          </svg>
-                        </button>
+                      <span class="text-sm font-medium text-gray-700 flex-1">{{ option.label }}</span>
+                      <span class="text-xs text-orange-500">+฿{{ option.extra_price }}</span>
+                      <!-- qty = 0: no button, whole card is the tap target -->
+                      <div v-if="getOptionQty(option.id) === 0" class="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                        <svg class="w-3 h-3 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
+                        </svg>
                       </div>
-                      <div v-else class="flex items-center gap-1">
-                        <button @click="decrementOption(option.id)" class="w-8 h-8 bg-orange-100 hover:bg-orange-200 text-orange-600 rounded-lg flex items-center justify-center font-bold text-sm transition-colors">−</button>
+                      <!-- qty > 0: stepper, stop propagation so card click doesn't fire -->
+                      <div v-else class="flex items-center gap-1" @click.stop>
+                        <button @click="decrementOption(option.id)" class="w-8 h-8 bg-orange-100 hover:bg-orange-200 text-orange-600 rounded-lg flex items-center justify-center font-bold transition-colors">−</button>
                         <span class="w-6 text-center font-bold text-orange-600 text-sm">{{ getOptionQty(option.id) }}</span>
-                        <button @click="incrementOption(option.id)" class="w-8 h-8 bg-orange-500 hover:bg-orange-600 text-white rounded-lg flex items-center justify-center font-bold text-sm transition-colors">+</button>
+                        <button @click="incrementOption(option.id)" class="w-8 h-8 bg-orange-500 hover:bg-orange-600 text-white rounded-lg flex items-center justify-center font-bold transition-colors">+</button>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <!-- Notes (no collapse) -->
-                <div class="p-5">
-                  <p class="font-bold text-gray-700 text-base mb-3">📝 คำอธิบายเพิ่มเติม</p>
-                  <div class="flex flex-wrap gap-2 mb-3">
+                <!-- Notes -->
+                <div class="px-4 py-3">
+                  <p class="text-xs font-semibold text-gray-400 mb-2">📝 หมายเหตุ</p>
+                  <div class="flex flex-wrap gap-1.5 mb-2.5">
                     <button
                       v-for="qn in quickNotes"
                       :key="qn"
                       @click="addQuickNote(qn)"
-                      class="px-3 py-1.5 bg-gray-100 hover:bg-orange-100 text-gray-700 hover:text-orange-700 rounded-full text-sm font-medium transition-colors"
+                      class="px-3 py-1.5 bg-gray-100 hover:bg-orange-100 text-gray-600 hover:text-orange-700 rounded-full text-sm font-medium transition-colors"
                     >{{ qn }}</button>
                   </div>
                   <textarea
                     v-model="notes"
-                    placeholder="เขียนคำอธิบายเพิ่มเติมที่นี่..."
-                    rows="4"
-                    class="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-400 focus:border-orange-400 outline-none resize-none text-gray-700 text-base"
+                    placeholder="เขียนคำอธิบายเพิ่มเติม..."
+                    rows="2"
+                    class="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-400 focus:border-orange-400 outline-none resize-none text-gray-700 text-sm"
                   ></textarea>
                 </div>
 
               </div>
             </div>
 
-            <!-- Modal footer: price + CTA at right -->
-            <div class="flex-shrink-0 border-t border-gray-100 px-6 py-4 flex items-center justify-between gap-4 bg-white">
-              <div>
-                <p class="text-gray-400 text-sm">฿{{ pricePerDish }} × {{ dishQuantity }} จาน</p>
-                <p class="text-3xl font-black text-orange-600">฿{{ currentItemPrice.toLocaleString() }}</p>
+            <!-- Modal footer -->
+            <div class="flex-shrink-0 border-t border-gray-100 px-4 py-3 flex items-center gap-2 bg-white">
+              <!-- Compact toggle (far left) -->
+              <button
+                @click="toggleModalCompact"
+                class="w-7 h-7 rounded-lg flex items-center justify-center transition-colors text-gray-300 hover:text-gray-500 hover:bg-gray-100 flex-shrink-0"
+                :title="modalCompact ? 'ขยายหน้าต่าง' : 'ย่อหน้าต่าง'"
+              >
+                <svg v-if="modalCompact" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"/>
+                </svg>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                </svg>
+              </button>
+
+              <div class="flex-1"></div>
+
+              <!-- Price (right-aligned) -->
+              <div class="text-right flex-shrink-0">
+                <p class="text-gray-400 text-xs leading-none mb-0.5">฿{{ pricePerDish }} × {{ dishQuantity }}</p>
+                <p class="text-lg font-black text-orange-600 leading-none">฿{{ currentItemPrice.toLocaleString() }}</p>
               </div>
+
+              <!-- Qty controls (right) -->
+              <div class="flex items-center gap-1 flex-shrink-0">
+                <button
+                  @click="decrementDish"
+                  :disabled="dishQuantity <= 1"
+                  class="w-9 h-9 bg-gray-100 border border-gray-200 rounded-xl flex items-center justify-center text-gray-600 hover:border-orange-400 hover:text-orange-500 disabled:opacity-40 disabled:cursor-not-allowed font-bold transition-colors text-lg"
+                >−</button>
+                <span class="w-7 text-center font-black text-base text-gray-800">{{ dishQuantity }}</span>
+                <button
+                  @click="incrementDish"
+                  class="w-9 h-9 bg-orange-500 rounded-xl flex items-center justify-center text-white hover:bg-orange-600 font-bold transition-colors text-lg"
+                >+</button>
+              </div>
+
+              <!-- Add button (far right) -->
               <button
                 @click="addToCart"
-                class="px-8 py-4 rounded-2xl bg-gradient-to-r from-orange-400 to-red-500 text-white text-lg font-bold shadow-lg shadow-orange-200 active:scale-95 transition-transform flex-shrink-0"
+                class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-orange-400 to-red-500 text-white text-sm font-bold shadow-md shadow-orange-200 active:scale-95 transition-transform flex-shrink-0"
               >
-                {{ editingOrderItem ? 'บันทึก (ออเดอร์ที่สั่ง)' : editingIndex !== null ? 'บันทึกการแก้ไข' : `เพิ่ม ${dishQuantity} จาน` }}
+                {{ editingOrderItem ? 'บันทึก (สั่งแล้ว)' : editingIndex !== null ? 'บันทึก' : 'เพิ่ม' }}
               </button>
             </div>
           </div>
