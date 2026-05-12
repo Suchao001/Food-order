@@ -1,4 +1,5 @@
 import { query } from '~/server/utils/db'
+import { sendPushToAll } from '~/server/utils/push'
 
 export default defineEventHandler(async (event) => {
     try {
@@ -59,6 +60,13 @@ export default defineEventHandler(async (event) => {
             }
 
             await query('COMMIT')
+
+            // Send push notification to kitchen (fire-and-forget)
+            sendPushToAll({
+                title: '🍽️ ออเดอร์ใหม่!',
+                body: `${items.length} รายการ${location ? ` • ${location}` : ''}`,
+                orderId
+            }).catch(() => {})
 
             return {
                 success: true,

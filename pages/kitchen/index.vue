@@ -104,6 +104,7 @@ onMounted(() => {
   if (saved !== null) autoTts.value = saved === 'true'
   const savedMode = localStorage.getItem('kitchen:view-mode')
   if (savedMode === 'compact') viewMode.value = 'compact'
+  checkPushStatus()
 })
 
 onUnmounted(() => {
@@ -244,6 +245,57 @@ const autoTts = ref(true)
 watch(autoTts, val => {
   localStorage.setItem('kitchen:auto-tts', String(val))
 })
+
+// Push Notifications
+const pushSupported = ref(false)
+const pushStatus = ref<'loading' | 'denied' | 'subscribed' | 'unsubscribed'>('loading')
+
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4)
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const rawData = atob(base64)
+  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)))
+}
+
+async function checkPushStatus() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    pushSupported.value = false
+    return
+  }
+  pushSupported.value = true
+  if (Notification.permission === 'denied') {
+    pushStatus.value = 'denied'
+    return
+  }
+  const reg = await navigator.serviceWorker.ready
+  const sub = await reg.pushManager.getSubscription()
+  pushStatus.value = sub ? 'subscribed' : 'unsubscribed'
+}
+
+async function subscribePush() {
+  try {
+    const { publicKey } = await $fetch<{ publicKey: string }>('/api/push/vapid-public-key')
+    const reg = await navigator.serviceWorker.ready
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(publicKey)
+    })
+    await $fetch('/api/push/subscribe', { method: 'POST', body: sub.toJSON() })
+    pushStatus.value = 'subscribed'
+  } catch (e) {
+    console.error('Push subscribe failed', e)
+    if (Notification.permission === 'denied') pushStatus.value = 'denied'
+  }
+}
+
+async function unsubscribePush() {
+  const reg = await navigator.serviceWorker.ready
+  const sub = await reg.pushManager.getSubscription()
+  if (sub) {
+    await sub.unsubscribe()
+    pushStatus.value = 'unsubscribed'
+  }
+}
 </script>
 
 <template>
@@ -313,6 +365,15 @@ watch(autoTts, val => {
             class="px-2 py-1 rounded-lg text-xs font-medium transition-colors"
             :class="autoTts ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'"
           >{{ autoTts ? '🔊' : '🔇' }}</button>
+          <!-- Push notification toggle -->
+          <button
+            v-if="pushSupported && pushStatus !== 'loading'"
+            @click="pushStatus === 'subscribed' ? unsubscribePush() : subscribePush()"
+            class="px-2 py-1 rounded-lg text-xs font-medium transition-colors"
+            :class="pushStatus === 'subscribed' ? 'bg-orange-100 text-orange-700' : pushStatus === 'denied' ? 'bg-red-100 text-red-400 cursor-not-allowed' : 'bg-gray-100 text-gray-500'"
+            :title="pushStatus === 'subscribed' ? 'ปิด notification' : pushStatus === 'denied' ? 'ถูกบล็อก — เปิดใน Settings' : 'เปิด notification'"
+            :disabled="pushStatus === 'denied'"
+          >{{ pushStatus === 'subscribed' ? '🔔' : pushStatus === 'denied' ? '🔕' : '🔔' }}</button>
           <button @click="refresh()" class="text-gray-500 hover:text-gray-700">🔄</button>
         </div>
       </div>

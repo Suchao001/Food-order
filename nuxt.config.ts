@@ -18,9 +18,17 @@ export default defineNuxtConfig({
     }
   },
   runtimeConfig: {
-    accessPin: process.env.ACCESS_PIN
+    accessPin: process.env.ACCESS_PIN,
+    vapidPrivateKey: process.env.VAPID_PRIVATE_KEY,
+    vapidEmail: process.env.VAPID_EMAIL,
+    public: {
+      vapidPublicKey: process.env.VAPID_PUBLIC_KEY
+    }
   },
   pwa: {
+    strategies: 'injectManifest',
+    srcDir: 'service-worker',
+    filename: 'sw.ts',
     registerType: 'autoUpdate',
     manifest: {
       name: 'Food Order',
@@ -38,10 +46,8 @@ export default defineNuxtConfig({
         { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
       ]
     },
-    workbox: {
-      navigateFallback: '/',
-      globPatterns: ['**/*.{js,css,html,png,svg,ico}'],
-      cleanupOutdatedCaches: true
+    injectManifest: {
+      globPatterns: ['**/*.{js,css,html,png,svg,ico}']
     },
     devOptions: {
       enabled: true,
