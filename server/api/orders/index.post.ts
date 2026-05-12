@@ -62,16 +62,38 @@ export default defineEventHandler(async (event) => {
 
             await query('COMMIT')
 
+            // Query menu names for notification
+            const menuIds = [...new Set(items.map((i: any) => i.menuId))]
+            const menuResult = await query(
+                `SELECT id, name FROM menus WHERE id = ANY($1)`,
+                [menuIds]
+            )
+            const menuMap = Object.fromEntries(menuResult.rows.map((r: any) => [r.id, r.name]))
+
+            const itemLines = items.map((i: any) => {
+                const name = menuMap[i.menuId] || 'รายการ'
+                const tags = [
+                    i.proteinType && i.proteinType !== 'หมู' ? i.proteinType : null,
+                    i.isSpecial ? 'พิเศษ' : null,
+                    i.isTakeaway ? 'ใส่กล่อง' : null,
+                ].filter(Boolean).join(' ')
+                return `• ${name} x${i.quantity}${tags ? ` (${tags})` : ''}`
+            }).join('\n')
+
+            const locationText = location ? ` • ${location}` : ''
+            const pushBody = items.map((i: any) => `${menuMap[i.menuId] || '?'} x${i.quantity}`).join(', ')
+
             // Send push notification to kitchen (fire-and-forget)
             sendPushToAll({
-                title: '🍽️ ออเดอร์ใหม่!',
-                body: `${items.length} รายการ${location ? ` • ${location}` : ''}`,
+                title: `🍽️ ออเดอร์ใหม่!${locationText}`,
+                body: pushBody,
                 orderId
             }).catch(() => {})
 
             // Send Telegram notification (fire-and-forget)
-            const locationText = location ? ` • ${location}` : ''
-            sendTelegramMessage(`🍽️ <b>ออเดอร์ใหม่!</b>${locationText}\n${items.length} รายการ • ฿${totalPrice}`).catch(() => {})
+            sendTelegramMessage(
+                `🍽️ <b>ออเดอร์ใหม่!</b>${locationText}\n\n${itemLines}\n\n💰 ฿${totalPrice}`
+            ).catch(() => {})
 
             return {
                 success: true,
