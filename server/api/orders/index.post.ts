@@ -1,6 +1,6 @@
 import { query } from '~/server/utils/db'
 import { sendPushToAll } from '~/server/utils/push'
-import { sendTelegramMessage } from '~/server/utils/telegram'
+import { sendTelegramOrderMessage } from '~/server/utils/telegram'
 
 export default defineEventHandler(async (event) => {
     try {
@@ -100,10 +100,13 @@ export default defineEventHandler(async (event) => {
                 orderId
             }).catch(() => {})
 
-            // Send Telegram notification (fire-and-forget)
-            sendTelegramMessage(
-                `🍽️ <b>ออเดอร์ใหม่!</b>${locationText}\n\n${itemLines}\n\n💰 ฿${totalPrice}`
-            ).catch(() => {})
+            // Send Telegram notification and store message_id
+            sendTelegramOrderMessage(
+                `🍽️ <b>ออเดอร์ใหม่!</b>${locationText}\n\n${itemLines}\n\n💰 ฿${totalPrice}`,
+                orderId
+            ).then(msgId => {
+                if (msgId) query('UPDATE orders SET telegram_message_id = $1 WHERE id = $2', [msgId, orderId]).catch(() => {})
+            }).catch(() => {})
 
             return {
                 success: true,
