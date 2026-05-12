@@ -5,6 +5,18 @@ export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
   modules: ['@nuxtjs/tailwindcss', '@vite-pwa/nuxt'],
+  app: {
+    head: {
+      link: [
+        { rel: 'manifest', href: '/manifest.webmanifest' }
+      ],
+      meta: [
+        { name: 'theme-color', content: '#f97316' },
+        { name: 'mobile-web-app-capable', content: 'yes' },
+        { name: 'apple-mobile-web-app-capable', content: 'yes' }
+      ]
+    }
+  },
   runtimeConfig: {
     accessPin: process.env.ACCESS_PIN
   },
