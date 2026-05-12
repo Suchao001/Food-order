@@ -24,6 +24,8 @@ self.addEventListener('push', (event) => {
       badge: '/icon-192.png',
       tag: `order-${data.orderId || Date.now()}`,
       renotify: true,
+      silent: false,
+      vibrate: [300, 100, 300, 100, 300],
       data: { url: '/kitchen' }
     })
   )
