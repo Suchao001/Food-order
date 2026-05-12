@@ -453,7 +453,7 @@ async function unsubscribePush() {
                 <div class="flex items-start gap-1.5 flex-wrap">
                   <span class="font-black text-gray-800 text-sm">{{ item.menu_name }}</span>
                   <span class="bg-orange-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">x{{ item.quantity }}</span>
-                  <span v-if="item.protein_type && item.protein_type !== 'หมู'" class="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">{{ item.protein_type }}</span>
+                  <span v-if="item.protein_type" class="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">{{ item.protein_type }}</span>
                   <span v-if="item.is_special" class="text-xs bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded-full">⭐</span>
                   <span v-if="item.is_takeaway" class="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">📦</span>
                 </div>
@@ -531,7 +531,7 @@ async function unsubscribePush() {
                 <!-- Item Details -->
                 <div class="p-3 bg-white">
                   <h4 class="font-black text-gray-800 text-xl mb-2">{{ item.menu_name }}</h4>
-                  <div v-if="item.protein_type && item.protein_type !== 'หมู'" class="mb-1">
+                  <div v-if="item.protein_type" class="mb-1">
                     <span class="text-sm bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">{{ item.protein_type }}</span>
                   </div>
 

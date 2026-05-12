@@ -62,23 +62,32 @@ export default defineEventHandler(async (event) => {
 
             await query('COMMIT')
 
-            // Query menu names for notification
+            // Query menu names and option names for notification
             const menuIds = [...new Set(items.map((i: any) => i.menuId))]
-            const menuResult = await query(
-                `SELECT id, name FROM menus WHERE id = ANY($1)`,
-                [menuIds]
-            )
+            const allOptionIds = items.flatMap((i: any) => (i.selectedOptions || []).map((o: any) => o.optionId))
+            const uniqueOptionIds = [...new Set(allOptionIds)]
+
+            const [menuResult, optionResult] = await Promise.all([
+                query(`SELECT id, name FROM menus WHERE id = ANY($1)`, [menuIds]),
+                uniqueOptionIds.length > 0
+                    ? query(`SELECT id, label FROM options WHERE id = ANY($1)`, [uniqueOptionIds])
+                    : Promise.resolve({ rows: [] })
+            ])
             const menuMap = Object.fromEntries(menuResult.rows.map((r: any) => [r.id, r.name]))
+            const optionMap = Object.fromEntries(optionResult.rows.map((r: any) => [r.id, r.label]))
 
             const itemLines = items.map((i: any) => {
                 const name = menuMap[i.menuId] || 'รายการ'
                 const tags = [
-                    i.proteinType && i.proteinType !== 'หมู' ? i.proteinType : null,
+                    i.proteinType ? i.proteinType : null,
                     i.isSpecial ? 'พิเศษ' : null,
                     i.isTakeaway ? 'ใส่กล่อง' : null,
                 ].filter(Boolean).join(' ')
+                const opts = (i.selectedOptions || [])
+                    .map((o: any) => `${optionMap[o.optionId] || '?'}${o.quantity > 1 ? ` x${o.quantity}` : ''}`)
+                    .join(', ')
                 const notes = i.notes ? ` 📝 ${i.notes}` : ''
-                return `• ${name} x${i.quantity}${tags ? ` (${tags})` : ''}${notes}`
+                return `• ${name} x${i.quantity}${tags ? ` (${tags})` : ''}${opts ? ` +${opts}` : ''}${notes}`
             }).join('\n')
 
             const locationText = location ? ` • ${location}` : ''
