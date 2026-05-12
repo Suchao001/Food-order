@@ -289,11 +289,16 @@ async function subscribePush() {
 }
 
 async function unsubscribePush() {
-  const reg = await navigator.serviceWorker.ready
-  const sub = await reg.pushManager.getSubscription()
-  if (sub) {
-    await sub.unsubscribe()
+  try {
+    const reg = await navigator.serviceWorker.ready
+    const sub = await reg.pushManager.getSubscription()
+    if (sub) {
+      await $fetch('/api/push/unsubscribe', { method: 'POST', body: { endpoint: sub.endpoint } })
+      await sub.unsubscribe()
+    }
     pushStatus.value = 'unsubscribed'
+  } catch (e) {
+    console.error('Push unsubscribe failed', e)
   }
 }
 </script>
@@ -373,7 +378,7 @@ async function unsubscribePush() {
             :class="pushStatus === 'subscribed' ? 'bg-orange-100 text-orange-700' : pushStatus === 'denied' ? 'bg-red-100 text-red-400 cursor-not-allowed' : 'bg-gray-100 text-gray-500'"
             :title="pushStatus === 'subscribed' ? 'ปิด notification' : pushStatus === 'denied' ? 'ถูกบล็อก — เปิดใน Settings' : 'เปิด notification'"
             :disabled="pushStatus === 'denied'"
-          >{{ pushStatus === 'subscribed' ? '🔔' : pushStatus === 'denied' ? '🔕' : '🔔' }}</button>
+          >{{ pushStatus === 'subscribed' ? '🔔' : pushStatus === 'denied' ? '🔕' : '🔕' }}</button>
           <button @click="refresh()" class="text-gray-500 hover:text-gray-700">🔄</button>
         </div>
       </div>
