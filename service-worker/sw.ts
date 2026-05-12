@@ -10,7 +10,12 @@ self.skipWaiting()
 
 self.addEventListener('push', (event) => {
   if (!event.data) return
-  const data = event.data.json()
+  let data: any = {}
+  try {
+    data = event.data.json()
+  } catch {
+    data = { title: event.data.text() }
+  }
 
   event.waitUntil(
     self.registration.showNotification(data.title || 'ออเดอร์ใหม่', {
