@@ -87,7 +87,7 @@ export default defineEventHandler(async (event) => {
                     .map((o: any) => `${optionMap[o.optionId] || '?'}${o.quantity > 1 ? ` x${o.quantity}` : ''}`)
                     .join(', ')
                 const notes = i.notes ? ` 📝 ${i.notes}` : ''
-                return `• ${name} x${i.quantity}${tags ? ` (${tags})` : ''}${opts ? ` +${opts}` : ''}${notes}`
+                return `• ${name} x${i.quantity}${tags ? ` (${tags})` : ''}${opts ? ` +${opts}` : ''} — ฿${i.totalPrice}${notes}`
             }).join('\n')
 
             const locationText = location ? ` • ${location}` : ''
