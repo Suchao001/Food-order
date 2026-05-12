@@ -98,6 +98,18 @@ function setViewMode(mode: 'normal' | 'compact') {
   localStorage.setItem('kitchen:view-mode', mode)
 }
 
+function onSwMessage(event: MessageEvent) {
+  if (event.data?.type === 'push-order' && autoTts.value) {
+    const { data } = event.data
+    const text = data.body || 'ออเดอร์ใหม่'
+    const utterance = new SpeechSynthesisUtterance(text)
+    utterance.lang = 'th-TH'
+    utterance.rate = 0.9
+    window.speechSynthesis.cancel()
+    window.speechSynthesis.speak(utterance)
+  }
+}
+
 onMounted(() => {
   startPolling()
   const saved = localStorage.getItem('kitchen:auto-tts')
@@ -105,6 +117,11 @@ onMounted(() => {
   const savedMode = localStorage.getItem('kitchen:view-mode')
   if (savedMode === 'compact') viewMode.value = 'compact'
   checkPushStatus()
+  navigator.serviceWorker?.addEventListener('message', onSwMessage)
+})
+
+onUnmounted(() => {
+  navigator.serviceWorker?.removeEventListener('message', onSwMessage)
 })
 
 onUnmounted(() => {

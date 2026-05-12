@@ -1,5 +1,6 @@
 import { query } from '~/server/utils/db'
 import { sendPushToAll } from '~/server/utils/push'
+import { sendTelegramMessage } from '~/server/utils/telegram'
 
 export default defineEventHandler(async (event) => {
     try {
@@ -67,6 +68,10 @@ export default defineEventHandler(async (event) => {
                 body: `${items.length} รายการ${location ? ` • ${location}` : ''}`,
                 orderId
             }).catch(() => {})
+
+            // Send Telegram notification (fire-and-forget)
+            const locationText = location ? ` • ${location}` : ''
+            sendTelegramMessage(`🍽️ <b>ออเดอร์ใหม่!</b>${locationText}\n${items.length} รายการ • ฿${totalPrice}`).catch(() => {})
 
             return {
                 success: true,
