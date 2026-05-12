@@ -77,7 +77,8 @@ export default defineEventHandler(async (event) => {
                     i.isSpecial ? 'พิเศษ' : null,
                     i.isTakeaway ? 'ใส่กล่อง' : null,
                 ].filter(Boolean).join(' ')
-                return `• ${name} x${i.quantity}${tags ? ` (${tags})` : ''}`
+                const notes = i.notes ? ` 📝 ${i.notes}` : ''
+                return `• ${name} x${i.quantity}${tags ? ` (${tags})` : ''}${notes}`
             }).join('\n')
 
             const locationText = location ? ` • ${location}` : ''
