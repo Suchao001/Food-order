@@ -5,6 +5,15 @@ export async function sendTelegramMessage(text: string) {
 
   await $fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: 'POST',
-    body: { chat_id: chatId, text, parse_mode: 'HTML' }
+    body: {
+      chat_id: chatId,
+      text,
+      parse_mode: 'HTML',
+      reply_markup: {
+        inline_keyboard: [[
+          { text: '👨‍🍳 เปิดครัว', url: 'https://food-order-kohl-mu.vercel.app/kitchen' }
+        ]]
+      }
+    }
   })
 }
