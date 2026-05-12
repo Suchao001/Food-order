@@ -18,7 +18,7 @@ export default defineNuxtConfig({
       background_color: '#ffffff',
       display: 'standalone',
       orientation: 'portrait',
-      start_url: '/order',
+      start_url: '/',
       scope: '/',
       icons: [
         { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
