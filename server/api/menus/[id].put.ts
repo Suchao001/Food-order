@@ -3,7 +3,7 @@ import { query } from '~/server/utils/db';
 export default defineEventHandler(async (event) => {
     const id = getRouterParam(event, 'id');
     const body = await readBody(event);
-    const { name, image_url, base_price, category_id, dept } = body;
+    const { name, image_url, base_price, category_id, dept, optionIds } = body;
 
     if (!id) {
         throw createError({
@@ -23,6 +23,17 @@ export default defineEventHandler(async (event) => {
                 statusCode: 404,
                 statusMessage: 'Menu not found',
             });
+        }
+
+        // Update option links if optionIds is provided as an array
+        if (optionIds && Array.isArray(optionIds)) {
+            // Remove existing relationships
+            await query('DELETE FROM menu_options WHERE menu_id = $1', [id]);
+            
+            // Insert new relationships
+            for (const optId of optionIds) {
+                await query('INSERT INTO menu_options (menu_id, option_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [id, optId]);
+            }
         }
 
         return {

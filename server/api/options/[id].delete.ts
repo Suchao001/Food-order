@@ -35,6 +35,8 @@ export default defineEventHandler(async (event) => {
         }
 
         // 3. Delete from Database
+        // Delete order selections first to avoid foreign key violations
+        await query('DELETE FROM order_item_selected_options WHERE option_id = $1', [id]);
         await query('DELETE FROM options WHERE id = $1', [id]);
 
         return {

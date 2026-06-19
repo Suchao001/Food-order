@@ -31,6 +31,34 @@ const uploading = ref(false)
 const message = ref({ type: '', text: '' })
 const fileInput = ref<HTMLInputElement | null>(null)
 
+// Fetch all available options for linking
+const { data: allOptionsResult } = await useFetch<{ success: boolean, data: any[] }>('/api/options')
+const allOptions = computed(() => allOptionsResult.value?.data || [])
+
+const activeOptionIds = ref<number[]>([])
+
+const groupedAllOptions = computed(() => {
+  const groups: Record<string, any[]> = {}
+  allOptions.value.forEach(opt => {
+    const g = opt.option_group || 'addons'
+    if (!groups[g]) groups[g] = []
+    groups[g].push(opt)
+  })
+  return groups
+})
+
+const groupNameThai = (group: string) => {
+  switch (group) {
+    case 'temperature': return '🧊 อุณหภูมิ (Temperature)'
+    case 'sweetness': return '🍬 ระดับความหวาน (Sweetness)'
+    case 'milk_type': return '🥛 ประเภทนม (Milk Option)'
+    case 'spiciness': return '🌶️ ระดับความเผ็ด (Spiciness)'
+    case 'meat_type': return '🥩 เลือกเนื้อสัตว์ (Meat / Protein Type)'
+    case 'addons': return '➕ เพิ่มเติม (Add-ons / Toppings)'
+    default: return '⚙️ อื่นๆ (Others)'
+  }
+}
+
 async function handleFileUpload(event: Event) {
   const target = event.target as HTMLInputElement
   if (!target.files?.length) return
@@ -76,7 +104,8 @@ async function handleSubmit() {
         base_price: Number(form.base_price),
         image_url: form.image_url,
         category_id: form.category_id ? Number(form.category_id) : null,
-        dept: form.dept
+        dept: form.dept,
+        optionIds: activeOptionIds.value
       }
     })
 
@@ -84,6 +113,7 @@ async function handleSubmit() {
     form.name = ''
     form.base_price = ''
     form.image_url = ''
+    activeOptionIds.value = []
     if (fileInput.value) fileInput.value.value = ''
   } catch (error: any) {
     message.value = { type: 'error', text: error.data?.statusMessage || 'สร้างเมนูไม่สำเร็จ' }
@@ -209,6 +239,41 @@ async function handleSubmit() {
                 >
                   🔄 เปลี่ยนรูป
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Enabled Options Grouped Checkbox List -->
+        <div class="border-t border-gray-150 pt-5 space-y-4">
+          <h3 class="text-lg font-bold text-gray-800 flex items-center gap-1.5 font-sans">
+            <span>⚙️ ตั้งค่าตัวเลือกเสริม (Menu Options)</span>
+          </h3>
+          <p class="text-xs text-gray-500 font-sans">ติ๊กเลือกตัวเลือกเสริมที่ต้องการเปิดใช้งานสำหรับเมนูนี้</p>
+          
+          <div v-if="allOptions.length === 0" class="text-sm text-gray-400 italic font-sans">
+            ยังไม่มี Option ในระบบ ไปสร้าง Option ก่อนได้ที่เมนูแผงควบคุมหลังบ้าน
+          </div>
+          
+          <div v-else class="space-y-4">
+            <div v-for="(opts, group) in groupedAllOptions" :key="group" class="bg-gray-50 p-4 rounded-xl space-y-2.5">
+              <h4 class="text-xs font-black text-gray-500 uppercase tracking-wider font-sans">{{ groupNameThai(group) }}</h4>
+              
+              <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                <label 
+                  v-for="opt in opts" 
+                  :key="opt.id"
+                  class="flex items-center gap-2 bg-white px-3 py-2.5 rounded-lg border border-gray-200 hover:bg-gray-150/50 cursor-pointer text-sm transition-all"
+                >
+                  <input 
+                    type="checkbox" 
+                    :value="opt.id" 
+                    v-model="activeOptionIds"
+                    class="rounded text-emerald-600 focus:ring-emerald-500 w-4.5 h-4.5 border-gray-300"
+                  >
+                  <span class="text-gray-700 font-medium font-sans">{{ opt.label }}</span>
+                  <span v-if="Number(opt.extra_price) > 0" class="text-xs text-emerald-600 font-bold ml-auto font-sans">+฿{{ opt.extra_price }}</span>
+                </label>
               </div>
             </div>
           </div>

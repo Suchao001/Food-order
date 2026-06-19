@@ -2,7 +2,7 @@ import { query } from '~/server/utils/db';
 
 export default defineEventHandler(async (event) => {
     const body = await readBody(event);
-    const { label, extra_price, image_url } = body;
+    const { label, extra_price, image_url, option_group } = body;
 
     // Validation
     if (!label) {
@@ -14,8 +14,8 @@ export default defineEventHandler(async (event) => {
 
     try {
         const result = await query(
-            'INSERT INTO options (label, extra_price, image_url) VALUES ($1, $2, $3) RETURNING *',
-            [label, extra_price || 0, image_url]
+            'INSERT INTO options (label, extra_price, image_url, option_group) VALUES ($1, $2, $3, $4) RETURNING *',
+            [label, extra_price || 0, image_url, option_group || 'addons']
         );
 
         return {

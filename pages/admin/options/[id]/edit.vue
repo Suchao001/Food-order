@@ -10,7 +10,8 @@ definePageMeta({
 const form = reactive({
   label: '',
   extra_price: '',
-  image_url: ''
+  image_url: '',
+  option_group: 'addons'
 })
 
 const loading = ref(false)
@@ -26,6 +27,7 @@ if (optionData.value?.data) {
   form.label = data.label
   form.extra_price = data.extra_price
   form.image_url = data.image_url
+  form.option_group = data.option_group || 'addons'
 } else if (fetchError.value) {
     message.value = { type: 'error', text: 'Failed to load option data' }
 }
@@ -68,7 +70,8 @@ async function handleSubmit() {
       body: {
         label: form.label,
         extra_price: Number(form.extra_price),
-        image_url: form.image_url
+        image_url: form.image_url,
+        option_group: form.option_group
       }
     })
 
@@ -120,6 +123,23 @@ async function handleDelete() {
           required
           class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
         >
+      </div>
+
+      <!-- Option Group Selection -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Option Group (กลุ่มประเภทตัวเลือก)</label>
+        <select 
+          v-model="form.option_group"
+          required
+          class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
+        >
+          <option value="addons">➕ เพิ่มเติม (Add-ons / Toppings)</option>
+          <option value="temperature">🧊 อุณหภูมิ (Temperature)</option>
+          <option value="sweetness">🍬 ระดับความหวาน (Sweetness)</option>
+          <option value="milk_type">🥛 ประเภทนม (Milk Option)</option>
+          <option value="spiciness">🌶️ ระดับความเผ็ด (Spiciness)</option>
+          <option value="meat_type">🥩 เลือกเนื้อสัตว์ (Meat / Protein Type)</option>
+        </select>
       </div>
 
       <!-- Extra Price -->

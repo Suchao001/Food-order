@@ -54,7 +54,7 @@ protein_type TEXT DEFAULT 'หมู'    -- 'หมู' | 'หมูสับ' |
 -- 7. ตารางเก็บตัวเลือกที่ผู้ใช้เลือกจริงในออร์เดอร์นั้น
 CREATE TABLE order_item_selected_options (
 order_item_id INTEGER REFERENCES order_items(id) ON DELETE CASCADE,
-option_id INTEGER REFERENCES options(id),
+option_id INTEGER REFERENCES options(id) ON DELETE CASCADE,
 quantity INTEGER DEFAULT 1,        -- จำนวนของ option ที่เลือก
 PRIMARY KEY (order_item_id, option_id)
 );

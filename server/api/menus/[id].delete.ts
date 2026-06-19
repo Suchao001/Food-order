@@ -36,6 +36,8 @@ export default defineEventHandler(async (event) => {
         }
 
         // 3. Delete from Database
+        // Set menu_id to NULL in historical orders to preserve sales data while allowing menu deletion
+        await query('UPDATE order_items SET menu_id = NULL WHERE menu_id = $1', [id]);
         await query('DELETE FROM menus WHERE id = $1', [id]);
 
         return {

@@ -73,11 +73,6 @@ async function startPolling() {
 
       if (hasNewOrders && oldOrderIds.length > 0) {
         playNotificationSound()
-        if (autoTts.value) {
-          for (const order of newOrders) {
-            speakOrder(order)
-          }
-        }
       }
       
       previousOrderIds.value = newOrderIds
@@ -110,21 +105,13 @@ function setViewMode(mode: 'normal' | 'compact') {
 }
 
 function onSwMessage(event: MessageEvent) {
-  if (event.data?.type === 'push-order' && autoTts.value) {
-    const { data } = event.data
-    const text = data.body || 'ออเดอร์ใหม่'
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.lang = 'th-TH'
-    utterance.rate = 0.9
-    window.speechSynthesis.cancel()
-    window.speechSynthesis.speak(utterance)
+  if (event.data?.type === 'push-order') {
+    playNotificationSound()
   }
 }
 
 onMounted(() => {
   startPolling()
-  const saved = localStorage.getItem('kitchen:auto-tts')
-  if (saved !== null) autoTts.value = saved === 'true'
   const savedMode = localStorage.getItem('kitchen:view-mode')
   if (savedMode === 'compact') viewMode.value = 'compact'
   checkPushStatus()
@@ -231,63 +218,7 @@ function getButtonText(status: string): string {
   return '✅ เสร็จแล้ว'
 }
 
-// Build TTS summary for an item
-function buildItemSummary(item: any): string {
-  let summary = `${item.menu_name} ${item.quantity} จาน`
-  
-  if (item.options?.length > 0) {
-    const optionsText = item.options.map((o: any) => {
-      return o.quantity > 1 ? `${o.label} ${o.quantity}` : o.label
-    }).join(', ')
-    summary += `, เพิ่ม ${optionsText}`
-  }
-  
-  if (item.is_special) {
-    summary += ', พิเศษ'
-  }
-  
-  if (item.is_takeaway) {
-    summary += ', ใส่กล่อง'
-  }
-  
-  if (item.notes) {
-    summary += `, ${item.notes}`
-  }
-  
-  return summary
-}
 
-// TTS using Web Speech API — speaks one item
-function speakItem(item: any) {
-  const summary = buildItemSummary(item)
-  if ('speechSynthesis' in window) {
-    const utterance = new SpeechSynthesisUtterance(summary)
-    utterance.lang = 'th-TH'
-    utterance.rate = 0.9
-    utterance.pitch = 1
-    window.speechSynthesis.speak(utterance)
-  }
-}
-
-// Speaks ALL items in an order sequentially
-function speakOrder(order: any) {
-  if (!('speechSynthesis' in window) || !order.items?.length) return
-  window.speechSynthesis.cancel()
-  for (const item of order.items) {
-    const utterance = new SpeechSynthesisUtterance(buildItemSummary(item))
-    utterance.lang = 'th-TH'
-    utterance.rate = 0.9
-    utterance.pitch = 1
-    window.speechSynthesis.speak(utterance)
-  }
-}
-
-// Auto-TTS toggle (persisted in localStorage)
-const autoTts = ref(true)
-
-watch(autoTts, val => {
-  localStorage.setItem('kitchen:auto-tts', String(val))
-})
 
 // Push Notifications
 const pushSupported = ref(false)
@@ -408,11 +339,7 @@ async function unsubscribePush() {
             <button @click="setViewMode('normal')" class="px-2 py-1 rounded-lg text-xs transition-colors" :class="viewMode === 'normal' ? 'bg-white shadow-sm text-gray-700' : 'text-gray-400'" title="ปกติ">🔲</button>
             <button @click="setViewMode('compact')" class="px-2 py-1 rounded-lg text-xs transition-colors" :class="viewMode === 'compact' ? 'bg-white shadow-sm text-gray-700' : 'text-gray-400'" title="กระชับ">▦</button>
           </div>
-          <button
-            @click="autoTts = !autoTts"
-            class="px-2 py-1 rounded-lg text-xs font-medium transition-colors"
-            :class="autoTts ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'"
-          >{{ autoTts ? '🔊' : '🔇' }}</button>
+
           <!-- Push notification toggle -->
           <button
             v-if="pushSupported && pushStatus !== 'loading'"
@@ -584,14 +511,7 @@ async function unsubscribePush() {
 
           <!-- Action Buttons -->
           <div class="p-3 pt-0 flex gap-2">
-            <button
-              v-if="order.items.length > 0"
-              @click="speakOrder(order)"
-              class="w-16 h-14 bg-blue-500 hover:bg-blue-600 text-white rounded-2xl flex items-center justify-center transition-all active:scale-95 text-2xl"
-              title="อ่านทุกรายการ"
-            >
-              🔊
-            </button>
+
 
             <button
               v-if="getNextStatus(order.status)"

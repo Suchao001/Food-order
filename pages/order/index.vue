@@ -802,14 +802,14 @@ const submitOrder = async () => {
 </script>
 
 <template>
-  <div class="h-screen flex flex-col bg-slate-900 text-slate-100 overflow-hidden font-sans">
+  <div class="h-screen flex flex-col bg-zinc-100 text-zinc-800 overflow-hidden font-sans">
     
     <!-- Top Header bar -->
-    <header class="bg-slate-800 border-b border-slate-700 px-6 py-4 flex items-center justify-between flex-shrink-0">
+    <header class="bg-white border-b border-zinc-200 px-6 py-4 flex items-center justify-between flex-shrink-0">
       <div class="flex items-center gap-3">
         <NuxtLink to="/" class="text-xl hover:opacity-80 transition-opacity">🏠</NuxtLink>
-        <h1 class="text-2xl font-black tracking-tight text-white flex items-center gap-2">
-          🍜 ระบบสั่งอาหาร & คาเฟ่ <span class="text-xs font-bold px-2 py-0.5 bg-orange-500 rounded text-white uppercase">POS Counter</span>
+        <h1 class="text-2xl font-black tracking-tight text-zinc-900 flex items-center gap-2">
+          🍜 ระบบสั่งอาหาร & คาเฟ่ <span class="text-xs font-bold px-2 py-0.5 bg-orange-600 rounded text-white uppercase">POS Counter</span>
         </h1>
       </div>
       
@@ -818,7 +818,7 @@ const submitOrder = async () => {
         <!-- Toggle Image Layout Button -->
         <button 
           @click="toggleShowImages"
-          class="bg-slate-700 hover:bg-slate-650 text-slate-200 px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-slate-600 active:scale-95"
+          class="bg-zinc-200 hover:bg-zinc-300 text-zinc-800 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 border border-zinc-300 active:scale-95 transition-all"
         >
           <span>{{ showImages ? '🖼️ มีรูป' : '🚫🖼️ ไม่มีรูป' }}</span>
         </button>
@@ -840,16 +840,16 @@ const submitOrder = async () => {
     <div class="flex-1 flex portrait:flex-col overflow-hidden">
       
       <!-- LEFT SIDEBAR / GRID: 65% width (100% in portrait) -->
-      <main class="w-[65%] portrait:w-full portrait:h-[60%] flex flex-col border-r portrait:border-r-0 portrait:border-b border-slate-800 bg-slate-950 overflow-hidden">
+      <main class="w-[65%] portrait:w-full portrait:h-[60%] flex flex-col border-r portrait:border-r-0 portrait:border-b border-zinc-200 bg-zinc-50 overflow-hidden">
         
         <!-- Category Selection Tabs (Large touch targets) -->
-        <div class="flex p-3 gap-2 bg-slate-900/60 border-b border-slate-800 overflow-x-auto flex-shrink-0">
+        <div class="flex p-3 gap-2 bg-white border-b border-zinc-200 overflow-x-auto flex-shrink-0">
           <button 
             @click="activeCategory = 'all'"
-            :class="`px-5 py-3 rounded-xl font-bold transition-all text-base ${
+            :class="`px-5 py-3 rounded-xl font-bold transition-all text-base border ${
               activeCategory === 'all' 
-                ? 'bg-orange-600 text-white shadow-lg shadow-orange-950/30' 
-                : 'bg-slate-800 text-slate-300 hover:bg-slate-750'
+                ? 'bg-orange-600 text-white border-orange-700' 
+                : 'bg-zinc-100 text-zinc-700 border-zinc-200 hover:bg-zinc-200'
             }`"
           >
             📂 ทั้งหมด
@@ -859,10 +859,10 @@ const submitOrder = async () => {
             v-for="cat in categories" 
             :key="cat.id"
             @click="activeCategory = cat.id"
-            :class="`px-5 py-3 rounded-xl font-bold transition-all text-base flex items-center gap-1.5 ${
+            :class="`px-5 py-3 rounded-xl font-bold transition-all text-base flex items-center gap-1.5 border ${
               activeCategory === cat.id 
-                ? 'bg-orange-600 text-white shadow-lg shadow-orange-950/30' 
-                : 'bg-slate-800 text-slate-300 hover:bg-slate-750'
+                ? 'bg-orange-600 text-white border-orange-700' 
+                : 'bg-zinc-100 text-zinc-700 border-zinc-200 hover:bg-zinc-200'
             }`"
           >
             <span>{{ cat.icon }}</span>
@@ -871,33 +871,33 @@ const submitOrder = async () => {
         </div>
 
         <!-- Beverage Temperature Sub-Tabs (Shown only when Beverage category is selected) -->
-        <div v-if="activeCategory === beverageCategoryId" class="flex px-4 py-2 gap-2 bg-slate-900/40 border-b border-slate-800 flex-shrink-0 animate-fade-in">
+        <div v-if="activeCategory === beverageCategoryId" class="flex px-4 py-2 gap-2 bg-zinc-100/50 border-b border-zinc-200 flex-shrink-0 animate-fade-in">
           <button 
             @click="beverageTempFilter = 'cold'"
-            :class="`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            :class="`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
               beverageTempFilter === 'cold' 
-                ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/30' 
-                : 'bg-slate-800 text-slate-400 hover:bg-slate-750'
+                ? 'bg-blue-600 text-white border-blue-700' 
+                : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50'
             }`"
           >
             🧊 เมนูเย็น (Cold)
           </button>
           <button 
             @click="beverageTempFilter = 'hot'"
-            :class="`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            :class="`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
               beverageTempFilter === 'hot' 
-                ? 'bg-orange-600 text-white shadow-lg shadow-orange-900/30' 
-                : 'bg-slate-800 text-slate-400 hover:bg-slate-750'
+                ? 'bg-orange-600 text-white border-orange-700' 
+                : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50'
             }`"
           >
             ☕ เมนูร้อน (Hot)
           </button>
           <button 
             @click="beverageTempFilter = 'all'"
-            :class="`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            :class="`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
               beverageTempFilter === 'all' 
-                ? 'bg-slate-750 text-slate-200 border border-slate-650' 
-                : 'bg-slate-800 text-slate-400'
+                ? 'bg-zinc-250 text-zinc-800 border-zinc-300' 
+                : 'bg-white text-zinc-600 border-zinc-200'
             }`"
           >
             📂 ทั้งหมด
@@ -908,12 +908,12 @@ const submitOrder = async () => {
         <div class="flex-1 p-4 overflow-y-auto min-h-0">
           <div v-if="menusPending" class="flex flex-col items-center justify-center py-24">
             <span class="text-4xl animate-spin mb-4">⏳</span>
-            <p class="text-slate-400">กำลังโหลดรายการเมนู...</p>
+            <p class="text-zinc-500">กำลังโหลดรายการเมนู...</p>
           </div>
           
           <div v-else-if="filteredMenus.length === 0" class="text-center py-24">
             <span class="text-5xl mb-4 block">🔍</span>
-            <p class="text-slate-400 text-lg font-medium">ไม่พบเมนูที่ตรงกับเงื่อนไข</p>
+            <p class="text-zinc-500 text-lg font-medium">ไม่พบเมนูที่ตรงกับเงื่อนไข</p>
           </div>
           
           <div v-else class="grid gap-3.5" :class="showImages ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'">
@@ -926,13 +926,13 @@ const submitOrder = async () => {
                 showImages ? 'flex-col overflow-hidden h-auto' : 'p-4 flex-col justify-between h-32'
               } ${
                 selectedMenu?.clientUniqueId === menu.clientUniqueId
-                  ? 'border-orange-500 ring-2 ring-orange-500 bg-orange-950/30'
-                  : 'border-slate-800 bg-slate-900 hover:bg-slate-850'
+                  ? 'border-orange-600 ring-2 ring-orange-600 bg-orange-50'
+                  : 'border-zinc-200 bg-white hover:bg-zinc-50'
               }`"
             >
               <!-- Card Image (Shown ONLY if showImages is true) -->
               <template v-if="showImages">
-                <div class="h-28 w-full bg-slate-850 relative overflow-hidden">
+                <div class="h-28 w-full bg-zinc-100 relative overflow-hidden">
                   <img 
                     v-if="menu.image_url" 
                     :src="menu.image_url" 
@@ -957,8 +957,8 @@ const submitOrder = async () => {
                 
                 <!-- Card details -->
                 <div class="p-3 flex-1 flex flex-col justify-between">
-                  <h3 class="font-bold text-white text-sm md:text-base leading-snug line-clamp-2">{{ menu.name }}</h3>
-                  <span class="text-orange-400 font-extrabold text-base mt-1 block">฿{{ menu.base_price }}</span>
+                  <h3 class="font-bold text-zinc-900 text-sm md:text-base leading-snug line-clamp-2">{{ menu.name }}</h3>
+                  <span class="text-orange-600 font-extrabold text-base mt-1 block">฿{{ menu.base_price }}</span>
                 </div>
               </template>
 
@@ -967,17 +967,17 @@ const submitOrder = async () => {
                 <div class="flex justify-between items-start w-full">
                   <span class="text-2xl">{{ menu.dept === 'Kitchen' ? '🍜' : menu.dept === 'Barista' ? '☕' : '🍰' }}</span>
                   <span :class="`text-[10px] uppercase font-black px-2 py-0.5 rounded ${
-                    menu.dept === 'Kitchen' ? 'bg-orange-950 text-orange-200' :
-                    menu.dept === 'Barista' ? 'bg-blue-950 text-blue-200' :
-                    'bg-pink-950 text-pink-200'
+                    menu.dept === 'Kitchen' ? 'bg-orange-100 text-orange-850' :
+                    menu.dept === 'Barista' ? 'bg-blue-100 text-blue-850' :
+                    'bg-pink-100 text-pink-850'
                   }`">
                     {{ menu.dept === 'Kitchen' ? 'ครัว' : menu.dept === 'Barista' ? 'บาร์น้ำ' : 'ขนม' }}
                   </span>
                 </div>
                 
                 <div>
-                  <h3 class="font-bold text-white text-sm md:text-base leading-snug line-clamp-2 font-sans">{{ menu.name }}</h3>
-                  <span class="text-orange-400 font-extrabold text-lg mt-1 block">฿{{ menu.base_price }}</span>
+                  <h3 class="font-bold text-zinc-900 text-sm md:text-base leading-snug line-clamp-2 font-sans">{{ menu.name }}</h3>
+                  <span class="text-orange-600 font-extrabold text-lg mt-1 block">฿{{ menu.base_price }}</span>
                 </div>
               </template>
             </button>
@@ -986,7 +986,7 @@ const submitOrder = async () => {
       </main>
 
       <!-- RIGHT PANEL: 35% width (100% in portrait) -->
-      <aside class="w-[35%] portrait:w-full portrait:h-[40%] bg-slate-900 flex flex-col overflow-hidden min-h-0">
+      <aside class="w-[35%] portrait:w-full portrait:h-[40%] bg-zinc-100 flex flex-col overflow-hidden min-h-0">
         
         <!-- SECTION 1: Modifier / Options Editor (Full height of the sidebar in landscape, full screen overlay in portrait) -->
         <div 

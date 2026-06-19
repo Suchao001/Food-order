@@ -25,6 +25,7 @@ export default defineEventHandler(async (event) => {
                 oi.is_takeaway,
                 oi.is_special,
                 oi.protein_type,
+                oi.discount,
                 oi.status as item_status,
                 m.id as menu_id,
                 m.name as menu_name,
@@ -85,6 +86,7 @@ export default defineEventHandler(async (event) => {
                         is_takeaway: row.is_takeaway,
                         is_special: row.is_special,
                         protein_type: row.protein_type,
+                        discount: row.discount,
                         options: []
                     }
                     order.items.push(item)

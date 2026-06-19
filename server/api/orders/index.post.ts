@@ -31,8 +31,8 @@ export default defineEventHandler(async (event) => {
             // 2. Insert Items
             for (const item of items) {
                 const itemResult = await query(
-                    `INSERT INTO order_items (order_id, menu_id, quantity, notes, item_price, is_takeaway, is_special, protein_type)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    `INSERT INTO order_items (order_id, menu_id, quantity, notes, item_price, is_takeaway, is_special, protein_type, discount)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
            RETURNING id`,
                     [
                         orderId,
@@ -42,7 +42,8 @@ export default defineEventHandler(async (event) => {
                         item.totalPrice,
                         item.isTakeaway || false,
                         item.isSpecial || false,
-                        item.proteinType || 'หมู'
+                        item.proteinType || 'หมู',
+                        item.discount || 0
                     ]
                 )
 

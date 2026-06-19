@@ -35,9 +35,7 @@
           <NuxtLink to="/kitchen" class="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-750 hover:bg-emerald-50 hover:text-emerald-750 font-bold transition-colors">
             👨‍🍳 จอห้องครัว
           </NuxtLink>
-          <NuxtLink to="/barista" class="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-755 hover:bg-emerald-50 hover:text-emerald-755 font-bold transition-colors">
-            ☕ จอบาริสต้า
-          </NuxtLink>
+
         </nav>
       </aside>
 
@@ -101,13 +99,7 @@
           >
             👨‍🍳 จอห้องครัว
           </NuxtLink>
-          <NuxtLink 
-            to="/barista" 
-            @click="showMobileMenu = false"
-            class="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 font-medium"
-          >
-            ☕ จอบาริสต้า
-          </NuxtLink>
+
         </div>
       </Transition>
     </div>

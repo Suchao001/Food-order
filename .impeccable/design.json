@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-06-19T11:24:32Z",
+  "title": "Design System: Clean Counter POS",
+  "extensions": {
+    "colorMeta": {
+      "primary": { "role": "primary", "displayName": "Daylight Orange", "canonical": "oklch(60.9% 0.216 46)", "tonalRamp": ["#431407", "#7c2d12", "#9a3412", "#c2410c", "#ea580c", "#f97316", "#ffedd5", "#fff7ed"] },
+      "secondary": { "role": "secondary", "displayName": "Checkout Green", "canonical": "oklch(62.7% 0.194 142)", "tonalRamp": ["#052e16", "#14532d", "#166534", "#15803d", "#16a34a", "#22c55e", "#dcfce7", "#f0fdf4"] },
+      "tertiary": { "role": "tertiary", "displayName": "Edit Amber", "canonical": "oklch(61.8% 0.178 76)", "tonalRamp": ["#451a03", "#78350f", "#92400e", "#b45309", "#d97706", "#f59e0b", "#fef3c7", "#fffbeb"] },
+      "neutral-bg": { "role": "neutral", "displayName": "Base Canvas", "canonical": "oklch(96.1% 0.003 252)", "tonalRamp": ["#09090b", "#18181b", "#27272a", "#52525b", "#a1a1aa", "#e4e4e7", "#f4f4f5", "#fafafa"] },
+      "neutral-surface": { "role": "neutral", "displayName": "Surface Container", "canonical": "oklch(100% 0 0)", "tonalRamp": ["#ffffff", "#ffffff", "#ffffff", "#ffffff", "#ffffff", "#ffffff", "#ffffff", "#ffffff"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display Title", "purpose": "Panel titles and POS page header." },
+      "body": { "displayName": "Body prose", "purpose": "General descriptions, checkboxes, list detail prose." }
+    },
+    "shadows": [],
+    "motion": [],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Action Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Used for checkout submission and adding item to bills.",
+      "html": "<button class=\"ds-btn-primary\">ใส่บิลนี้</button>",
+      "css": ".ds-btn-primary { background-color: #ea580c; color: #ffffff; padding: 12px 24px; font-weight: 700; border: none; border-radius: 12px; font-family: sans-serif; cursor: pointer; }"
+    },
+    {
+      "name": "POS Grid Card",
+      "kind": "card",
+      "description": "Visual grid card container representing coffee/food items.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-title\">Espresso [เย็น]</div><div class=\"ds-card-price\">฿55</div></div>",
+      "css": ".ds-card { background-color: #ffffff; border: 1px solid #e4e4e7; border-radius: 16px; padding: 12px; font-family: sans-serif; } .ds-card-title { color: #18181b; font-weight: 700; font-size: 14px; } .ds-card-price { color: #ea580c; font-weight: 800; font-size: 16px; margin-top: 4px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Clean Counter",
+    "overview": "A bright, light-themed visual layout optimized for touchscreens and low-spec hardware. The design prioritizes speed and absolute legibility. Rather than using modern styling bells and whistles, the Clean Counter POS uses distinct layout panels, fine borders, and clear typographic hierarchy.",
+    "keyCharacteristics": [
+      "Light Theme Canvas: Bright backgrounds that stay readable under bright counter lighting.",
+      "No-Shadow Elevation: Spatial depth is conveyed through subtle container borders and contrasting white/gray layers.",
+      "Zero Transition Overhead: Immediate response triggers without delay-inducing CSS transitions."
+    ],
+    "rules": [
+      { "name": "The Performant Contrast Rule", "body": "Background colors must only transition between base canvas #f4f4f5 and card surfaces #ffffff. Never use gradients, textured layers, or semi-transparent gray scales.", "section": "colors" },
+      { "name": "The Flat Separation Rule", "body": "Depth and containment are defined exclusively by 1px solid borders (#e4e4e7) and clean white surface cards set against the light zinc backdrop.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do use high-contrast Deep Ink text on bright backgrounds to maximize screen readability under ambient store light.",
+      "Do verify touch target sizes remain above 44px to accommodate quick physical selections.",
+      "Do keep receipt formatting strictly in monospace font for accurate vertical column alignment."
+    ],
+    "donts": [
+      "Don't use box-shadows, blurred backdrop panels, or glassmorphic gradients.",
+      "Don't use transition durations or delay keyframes that introduce visual input latency.",
+      "Don't use dark gray or saturated black backgrounds for main containers (avoids screen reflection/glare)."
+    ]
+  }
+}
