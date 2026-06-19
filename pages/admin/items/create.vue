@@ -3,11 +3,28 @@ definePageMeta({
   layout: 'admin'
 })
 
+const { data: categoryResult } = await useFetch<{ success: boolean, data: { id: number, name: string, icon: string }[] }>('/api/categories')
+const categories = computed(() => categoryResult.value?.data || [])
+
 const form = reactive({
   name: '',
   base_price: '',
-  image_url: ''
+  image_url: '',
+  category_id: '' as string | number,
+  dept: 'Kitchen' as 'Kitchen' | 'Barista' | 'Bakery'
 })
+
+// Set default category when categories are loaded
+watch(categories, (newVal) => {
+  if (newVal && newVal.length > 0 && !form.category_id) {
+    const foodCat = newVal.find(c => c.name === 'Food')
+    if (foodCat) {
+      form.category_id = foodCat.id
+    } else {
+      form.category_id = newVal[0].id
+    }
+  }
+}, { immediate: true })
 
 const loading = ref(false)
 const uploading = ref(false)
@@ -57,7 +74,9 @@ async function handleSubmit() {
       body: {
         name: form.name,
         base_price: Number(form.base_price),
-        image_url: form.image_url
+        image_url: form.image_url,
+        category_id: form.category_id ? Number(form.category_id) : null,
+        dept: form.dept
       }
     })
 
@@ -86,19 +105,59 @@ async function handleSubmit() {
       <form @submit.prevent="handleSubmit" class="space-y-5">
         <!-- Dish Name -->
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">ชื่ออาหาร</label>
+          <label class="block text-sm font-medium text-gray-700 mb-2">ชื่อเมนู (อาหาร / เครื่องดื่ม / ขนม)</label>
           <input 
             v-model="form.name"
             type="text" 
-            placeholder="เช่น ข้าวผัดกะเพรา"
+            placeholder="เช่น ข้าวผัดกะเพรา, ลาเต้เย็น, ช็อกโกแลตเค้ก"
             required
             class="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
           >
         </div>
 
+        <!-- Category Select -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">หมวดหมู่สินค้า</label>
+          <select 
+            v-model="form.category_id"
+            required
+            class="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
+          >
+            <option v-for="cat in categories" :key="cat.id" :value="cat.id">
+              {{ cat.icon }} {{ cat.name === 'Food' ? 'อาหาร (Food)' : cat.name === 'Beverage' ? 'เครื่องดื่ม (Beverage)' : cat.name === 'Dessert' ? 'ของหวาน (Dessert)' : cat.name }}
+            </option>
+          </select>
+        </div>
+
+        <!-- Department Select (Preparation Area) -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">แผนกที่ผลิต (สถานที่เตรียมสินค้า)</label>
+          <div class="grid grid-cols-3 gap-3">
+            <label 
+              v-for="d in ['Kitchen', 'Barista', 'Bakery']" 
+              :key="d"
+              :class="`flex items-center justify-center py-3 px-4 rounded-xl border text-sm font-medium cursor-pointer transition-all ${
+                form.dept === d 
+                  ? 'border-emerald-600 bg-emerald-50 text-emerald-700 font-semibold' 
+                  : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+              }`"
+            >
+              <input 
+                type="radio" 
+                :value="d" 
+                v-model="form.dept" 
+                class="sr-only"
+              >
+              <span>
+                {{ d === 'Kitchen' ? '🍳 ห้องครัว' : d === 'Barista' ? '☕ บาร์น้ำ' : '🍰 ตู้ขนม' }}
+              </span>
+            </label>
+          </div>
+        </div>
+
         <!-- Base Price -->
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">ราคา (บาท)</label>
+          <label class="block text-sm font-medium text-gray-700 mb-2">ราคาเริ่มต้น (บาท)</label>
           <div class="relative">
             <span class="absolute left-4 top-3 text-gray-500">฿</span>
             <input 

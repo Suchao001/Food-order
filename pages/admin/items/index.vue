@@ -49,8 +49,17 @@ const menus = computed(() => result.value?.data || [])
             </NuxtLink>
           </div>
         </div>
-        <div class="p-4">
-          <h3 class="font-bold text-lg text-gray-800">{{ menu.name }}</h3>
+        <div class="p-4 flex flex-col gap-2">
+          <h3 class="font-bold text-lg text-gray-800 leading-snug">{{ menu.name }}</h3>
+          <div class="flex flex-wrap gap-1.5">
+            <span :class="`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium ${
+              menu.dept === 'Kitchen' ? 'bg-orange-50 text-orange-700 border border-orange-100' :
+              menu.dept === 'Barista' ? 'bg-blue-50 text-blue-700 border border-blue-100' :
+              'bg-pink-50 text-pink-700 border border-pink-100'
+            }`">
+              {{ menu.dept === 'Kitchen' ? '🍳 ครัวอาหาร' : menu.dept === 'Barista' ? '☕ บาร์น้ำ' : '🍰 ตู้ขนม' }}
+            </span>
+          </div>
         </div>
       </div>
     </div>

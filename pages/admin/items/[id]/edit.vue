@@ -7,10 +7,15 @@ definePageMeta({
   layout: 'admin'
 })
 
+const { data: categoryResult } = await useFetch<{ success: boolean, data: { id: number, name: string, icon: string }[] }>('/api/categories')
+const categories = computed(() => categoryResult.value?.data || [])
+
 const form = reactive({
   name: '',
   base_price: '',
-  image_url: ''
+  image_url: '',
+  category_id: '' as string | number,
+  dept: 'Kitchen' as 'Kitchen' | 'Barista' | 'Bakery'
 })
 
 const loading = ref(false)
@@ -26,6 +31,8 @@ if (menuData.value?.data) {
   form.name = data.name
   form.base_price = data.base_price
   form.image_url = data.image_url
+  form.category_id = data.category_id || ''
+  form.dept = data.dept || 'Kitchen'
 } else if (fetchError.value) {
     message.value = { type: 'error', text: 'Failed to load menu data' }
 }
@@ -73,7 +80,9 @@ async function handleSubmit() {
       body: {
         name: form.name,
         base_price: Number(form.base_price),
-        image_url: form.image_url
+        image_url: form.image_url,
+        category_id: form.category_id ? Number(form.category_id) : null,
+        dept: form.dept
       }
     })
 
@@ -118,26 +127,66 @@ async function handleDelete() {
     <form @submit.prevent="handleSubmit" class="space-y-5">
       <!-- Dish Name -->
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Dish Name (ชื่ออาหาร)</label>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Menu Name (ชื่อเมนู)</label>
         <input 
           v-model="form.name"
           type="text" 
-          placeholder="e.g. Pad Thai"
+          placeholder="เช่น ข้าวผัดกะเพรา, ลาเต้เย็น, ช็อกโกแลตเค้ก"
           required
           class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
         >
       </div>
 
+      <!-- Category Select -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">หมวดหมู่สินค้า</label>
+        <select 
+          v-model="form.category_id"
+          required
+          class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
+        >
+          <option v-for="cat in categories" :key="cat.id" :value="cat.id">
+            {{ cat.icon }} {{ cat.name === 'Food' ? 'อาหาร (Food)' : cat.name === 'Beverage' ? 'เครื่องดื่ม (Beverage)' : cat.name === 'Dessert' ? 'ของหวาน (Dessert)' : cat.name }}
+          </option>
+        </select>
+      </div>
+
+      <!-- Department Select (Preparation Area) -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">แผนกที่ผลิต (สถานที่เตรียมสินค้า)</label>
+        <div class="grid grid-cols-3 gap-3">
+          <label 
+            v-for="d in ['Kitchen', 'Barista', 'Bakery']" 
+            :key="d"
+            :class="`flex items-center justify-center py-3 px-4 rounded-lg border text-sm font-medium cursor-pointer transition-all ${
+              form.dept === d 
+                ? 'border-emerald-600 bg-emerald-50 text-emerald-700 font-semibold' 
+                : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+            }`"
+          >
+            <input 
+              type="radio" 
+              :value="d" 
+              v-model="form.dept" 
+              class="sr-only"
+            >
+            <span>
+              {{ d === 'Kitchen' ? '🍳 ห้องครัว' : d === 'Barista' ? '☕ บาร์น้ำ' : '🍰 ตู้ขนม' }}
+            </span>
+          </label>
+        </div>
+      </div>
+
       <!-- Base Price -->
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Price (ราคา)</label>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Price (ราคาเริ่มต้น)</label>
         <div class="relative">
           <span class="absolute left-4 top-3 text-gray-500">฿</span>
           <input 
             v-model="form.base_price"
             type="number" 
-            placeholder="0.00"
-            step="0.01"
+            placeholder="0"
+            step="1"
             required
             class="w-full pl-8 pr-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
           >
