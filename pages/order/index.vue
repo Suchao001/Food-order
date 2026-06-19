@@ -827,10 +827,10 @@ const submitOrder = async () => {
           v-model="search"
           type="text" 
           placeholder="🔎 ค้นหาเมนู..." 
-          class="bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm text-white w-48 focus:w-64 focus:outline-none focus:ring-1 focus:ring-orange-500 transition-all"
+          class="bg-zinc-100 border border-zinc-300 rounded-xl px-4 py-2 text-sm text-zinc-900 w-48 focus:w-64 focus:outline-none focus:border-orange-600 focus:ring-1 focus:ring-orange-600 transition-all"
         />
         
-        <NuxtLink to="/admin/items" class="bg-slate-700 hover:bg-slate-600 text-slate-200 px-4 py-2 rounded-xl text-sm font-medium transition-colors">
+        <NuxtLink to="/admin/items" class="bg-white hover:bg-zinc-100 text-zinc-700 border border-zinc-200 px-4 py-2 rounded-xl text-sm font-semibold active:scale-95 transition-all">
           ⚙️ หลังบ้าน
         </NuxtLink>
       </div>
@@ -991,15 +991,15 @@ const submitOrder = async () => {
         <!-- SECTION 1: Modifier / Options Editor (Full height of the sidebar in landscape, full screen overlay in portrait) -->
         <div 
           v-if="selectedMenu"
-          class="modifier-panel h-full flex flex-col overflow-hidden min-h-0 portrait:fixed portrait:inset-0 portrait:z-50 portrait:w-full portrait:h-full portrait:max-h-screen portrait:bg-slate-900 animate-fade-in"
+          class="modifier-panel h-full flex flex-col overflow-hidden min-h-0 portrait:fixed portrait:inset-0 portrait:z-50 portrait:w-full portrait:h-full portrait:max-h-screen portrait:bg-white animate-fade-in border-l border-zinc-200 bg-white"
         >
-          <div class="bg-slate-850 px-4 py-4 flex items-center justify-between border-b border-slate-800 flex-shrink-0">
-            <h2 class="text-base font-black tracking-wider text-white uppercase flex items-center gap-1.5 font-sans">
+          <div class="bg-zinc-50 px-4 py-4 flex items-center justify-between border-b border-zinc-200 flex-shrink-0">
+            <h2 class="text-base font-black tracking-wider text-zinc-900 uppercase flex items-center gap-1.5 font-sans">
               <span>{{ editingCartItem ? '✏️ แก้ไขรายการในตะกร้า' : '⚙️ ปรับแต่งเครื่องดื่ม/อาหาร' }}</span>
             </h2>
             <button 
               @click="selectedMenu = null" 
-              class="text-sm font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-750 px-3.5 py-1.5 rounded-xl active:scale-95 transition-all border border-slate-700"
+              class="text-sm font-bold text-zinc-700 hover:bg-zinc-100 bg-white px-3.5 py-1.5 rounded-xl active:scale-95 border border-zinc-200 transition-all"
             >
               ✕ ยกเลิก (Cancel)
             </button>
@@ -1008,21 +1008,21 @@ const submitOrder = async () => {
           <!-- Loading state for options -->
           <div v-if="activeOptionsPending" class="flex-1 flex flex-col items-center justify-center py-12">
             <span class="text-2xl animate-spin mb-2">⏳</span>
-            <p class="text-xs text-slate-400">กำลังโหลดตัวเลือกสำหรับ {{ selectedMenu.name }}...</p>
+            <p class="text-xs text-zinc-505">กำลังโหลดตัวเลือกสำหรับ {{ selectedMenu.name }}...</p>
           </div>
 
           <!-- Options Editor Container (Scrollable) -->
           <div v-else class="flex-1 overflow-y-auto p-4 space-y-4">
             
             <!-- Item Header -->
-            <div class="bg-slate-800/80 p-3.5 rounded-xl border border-slate-700/60 flex items-center gap-3">
-              <div class="w-12 h-12 rounded-lg bg-slate-950 overflow-hidden flex-shrink-0">
+            <div class="bg-zinc-50 p-3.5 rounded-xl border border-zinc-200 flex items-center gap-3">
+              <div class="w-12 h-12 rounded-lg bg-zinc-200 overflow-hidden flex-shrink-0">
                 <img v-if="selectedMenu.image_url" :src="selectedMenu.image_url" class="w-full h-full object-cover">
                 <div v-else class="w-full h-full flex items-center justify-center text-xl">☕</div>
               </div>
               <div class="flex-1">
-                <h3 class="font-black text-white text-lg leading-tight">{{ selectedMenu.name }}</h3>
-                <span class="text-xs text-slate-400">ราคาเริ่มต้น ฿{{ selectedMenu.base_price }}</span>
+                <h3 class="font-black text-zinc-900 text-lg leading-tight">{{ selectedMenu.name }}</h3>
+                <span class="text-xs text-zinc-505 font-medium">ราคาเริ่มต้น ฿{{ selectedMenu.base_price }}</span>
               </div>
             </div>
 
@@ -1030,7 +1030,7 @@ const submitOrder = async () => {
             <div v-if="selectedMenu.dept === 'Kitchen'" class="space-y-4">
               <!-- Protein Selection -->
               <div>
-                <p class="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">🥩 เลือกเนื้อสัตว์ (Protein)</p>
+                <p class="text-xs font-bold text-zinc-500 mb-2 uppercase tracking-wide">🥩 เลือกเนื้อสัตว์ (Protein)</p>
                 <div class="grid grid-cols-3 gap-2">
                   <button 
                     v-for="p in proteins" 
@@ -1038,8 +1038,8 @@ const submitOrder = async () => {
                     @click="selectedProtein = p"
                     :class="`py-2 rounded-xl text-sm font-semibold border transition-all ${
                       selectedProtein === p 
-                        ? 'border-orange-500 bg-orange-950/40 text-orange-400' 
-                        : 'border-slate-800 bg-slate-950 text-slate-400 hover:bg-slate-850'
+                        ? 'border-orange-600 bg-orange-50 text-orange-750 font-bold' 
+                        : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'
                     }`"
                   >
                     {{ p }}
@@ -1053,12 +1053,12 @@ const submitOrder = async () => {
                   @click="isSpecial = !isSpecial"
                   :class="`flex-1 py-3 px-4 rounded-xl border text-sm font-bold flex items-center justify-between transition-all ${
                     isSpecial 
-                      ? 'border-orange-500 bg-orange-950/40 text-orange-400' 
-                      : 'border-slate-800 bg-slate-950 text-slate-400'
+                      ? 'border-orange-600 bg-orange-50 text-orange-750' 
+                      : 'border-zinc-200 bg-white text-zinc-700'
                   }`"
                 >
                   <span>⭐ จานพิเศษ (Special)</span>
-                  <span class="text-xs px-2 py-0.5 bg-orange-600 text-white rounded-full">+฿10</span>
+                  <span class="text-xs px-2.5 py-0.5 bg-orange-600 text-white rounded-full font-bold">+฿10</span>
                 </button>
               </div>
             </div>
@@ -1066,7 +1066,7 @@ const submitOrder = async () => {
             <!-- Custom Beverage Option Groups (Show if beverage/dessert has linked options) -->
             <div v-if="activeItemOptions.length > 0" class="space-y-4">
               <div v-for="(opts, group) in groupedActiveOptions" :key="group" class="space-y-2">
-                <p class="text-xs font-bold text-slate-400 uppercase tracking-wide font-sans">
+                <p class="text-xs font-bold text-zinc-500 uppercase tracking-wide font-sans">
                   {{ groupNameThai(group) }}
                 </p>
 
@@ -1078,13 +1078,13 @@ const submitOrder = async () => {
                     @click="selectedSingleOptionsState[group] = opt.id"
                     :class="`py-2.5 px-2 rounded-xl border text-center flex flex-col justify-center transition-all ${
                       selectedSingleOptionsState[group] === opt.id 
-                        ? 'border-orange-500 bg-orange-950/40 text-orange-400' 
-                        : 'border-slate-800 bg-slate-950 text-slate-400 hover:bg-slate-850'
+                        ? 'border-orange-600 bg-orange-50 text-orange-750 font-bold' 
+                        : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'
                     }`"
                   >
                     <span class="text-sm font-bold leading-tight">{{ opt.label }}</span>
-                    <span v-if="Number(opt.extra_price) > 0" class="text-[10px] text-orange-400 font-extrabold mt-0.5">+฿{{ opt.extra_price }}</span>
-                    <span v-else-if="Number(opt.extra_price) < 0" class="text-[10px] text-emerald-400 font-extrabold mt-0.5">-฿{{ Math.abs(Number(opt.extra_price)) }}</span>
+                    <span v-if="Number(opt.extra_price) > 0" class="text-[10px] text-orange-600 font-extrabold mt-0.5">+฿{{ opt.extra_price }}</span>
+                    <span v-else-if="Number(opt.extra_price) < 0" class="text-[10px] text-green-600 font-extrabold mt-0.5">-฿{{ Math.abs(Number(opt.extra_price)) }}</span>
                   </button>
                 </div>
 
@@ -1096,12 +1096,12 @@ const submitOrder = async () => {
                     @click="selectedOptionsState[opt.id] = !selectedOptionsState[opt.id]"
                     :class="`py-2.5 px-3 rounded-xl border text-left flex items-center justify-between transition-all ${
                       selectedOptionsState[opt.id] 
-                        ? 'border-orange-500 bg-orange-950/40 text-orange-400 font-bold' 
-                        : 'border-slate-800 bg-slate-950 text-slate-400 hover:bg-slate-850'
+                        ? 'border-orange-600 bg-orange-50 text-orange-750 font-bold' 
+                        : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'
                     }`"
                   >
                     <span class="text-sm">{{ opt.label }}</span>
-                    <span class="text-xs text-orange-400 font-extrabold">
+                    <span class="text-xs text-orange-600 font-extrabold">
                       {{ Number(opt.extra_price) > 0 ? `+฿${opt.extra_price}` : 'ฟรี' }}
                     </span>
                   </button>
@@ -1111,12 +1111,12 @@ const submitOrder = async () => {
 
             <!-- Notes & Quick presets -->
             <div class="space-y-2">
-              <p class="text-xs font-bold text-slate-400 uppercase tracking-wide font-sans">📝 หมายเหตุ ( Notes )</p>
+              <p class="text-xs font-bold text-zinc-500 uppercase tracking-wide font-sans">📝 หมายเหตุ ( Notes )</p>
               <input 
                 v-model="notes"
                 type="text" 
                 placeholder="ระบุเพิ่มเติม เช่น ขมน้อย, หวานธรรมชาติ..."
-                class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+                class="w-full bg-white border border-zinc-300 rounded-xl px-4 py-2.5 text-sm text-zinc-900 focus:outline-none focus:border-orange-655 focus:ring-1 focus:ring-orange-655"
               />
               <div class="flex flex-wrap gap-1 font-sans">
                 <button 
@@ -1124,7 +1124,7 @@ const submitOrder = async () => {
                   :key="qn"
                   type="button"
                   @click="addQuickNote(qn)"
-                  class="bg-slate-950 text-slate-400 px-2 py-1 rounded border border-slate-800 hover:bg-slate-850 text-xs transition-colors"
+                  class="bg-white text-zinc-650 px-2.5 py-1.5 rounded-lg border border-zinc-250 hover:bg-zinc-50 text-xs font-semibold"
                 >
                   + {{ qn }}
                 </button>
@@ -1132,10 +1132,10 @@ const submitOrder = async () => {
             </div>
 
             <!-- Discount Section (Built-in POS feature, applies to all menus) -->
-            <div class="space-y-2 border-t border-slate-800/80 pt-4 font-sans">
-              <p class="text-xs font-bold text-slate-400 uppercase tracking-wide flex items-center justify-between">
+            <div class="space-y-2 border-t border-zinc-200 pt-4 font-sans">
+              <p class="text-xs font-bold text-zinc-500 uppercase tracking-wide flex items-center justify-between">
                 <span>💸 ส่วนลดราคา (Discount)</span>
-                <span v-if="discountAmount > 0" class="text-emerald-400 font-black">-฿{{ discountAmount }}</span>
+                <span v-if="discountAmount > 0" class="text-green-600 font-black">-฿{{ discountAmount }}</span>
               </p>
               
               <div class="grid grid-cols-3 gap-2">
@@ -1146,8 +1146,8 @@ const submitOrder = async () => {
                   @click="selectDiscountPreset(preset)"
                   :class="`py-2.5 rounded-xl border text-center transition-all ${
                     !isCustomDiscount && discountAmount === preset
-                      ? 'border-emerald-500 bg-emerald-950/40 text-emerald-400 font-bold'
-                      : 'border-slate-800 bg-slate-950 text-slate-400 hover:bg-slate-850'
+                      ? 'border-green-600 bg-green-50 text-green-700 font-bold'
+                      : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'
                   }`"
                 >
                   <span class="text-sm font-bold">{{ preset === 0 ? 'ไม่มี' : `${preset} ฿` }}</span>
@@ -1161,8 +1161,8 @@ const submitOrder = async () => {
                   @click="enableCustomDiscount"
                   :class="`py-2.5 px-3 rounded-xl border text-center transition-all flex-shrink-0 text-sm font-bold ${
                     isCustomDiscount
-                      ? 'border-emerald-500 bg-emerald-950/40 text-emerald-400'
-                      : 'border-slate-800 bg-slate-950 text-slate-400 hover:bg-slate-850'
+                      ? 'border-green-600 bg-green-50 text-green-700'
+                      : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'
                   }`"
                 >
                   กำหนดเอง
@@ -1175,27 +1175,27 @@ const submitOrder = async () => {
                     placeholder="ระบุส่วนลดเอง..."
                     :disabled="!isCustomDiscount"
                     @input="handleCustomDiscountInput"
-                    class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    class="w-full bg-white border border-zinc-300 rounded-xl px-4 py-2 text-sm text-zinc-900 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-600 disabled:bg-zinc-100 disabled:text-zinc-400 disabled:cursor-not-allowed"
                   />
-                  <span class="absolute right-3 top-2.5 text-xs text-slate-500 font-bold">บาท (฿)</span>
+                  <span class="absolute right-3 top-2.5 text-xs text-zinc-505 font-bold font-mono">บาท (฿)</span>
                 </div>
               </div>
             </div>
 
             <!-- Quantity & Add to Bill Box -->
-            <div class="pt-4 border-t border-slate-800 flex items-center justify-between gap-3">
+            <div class="pt-4 border-t border-zinc-200 flex items-center justify-between gap-3">
               <!-- Stepper -->
-              <div class="flex items-center bg-slate-950 rounded-xl border border-slate-800 p-1">
+              <div class="flex items-center bg-zinc-50 rounded-xl border border-zinc-200 p-1">
                 <button 
                   @click="activeQuantity > 1 && activeQuantity--" 
-                  class="w-10 h-10 rounded-lg bg-slate-800 hover:bg-slate-750 text-white font-extrabold text-lg flex items-center justify-center transition-colors"
+                  class="w-10 h-10 rounded-lg bg-white border border-zinc-200 hover:bg-zinc-100 text-zinc-800 font-extrabold text-lg flex items-center justify-center"
                 >
                   －
                 </button>
-                <span class="px-5 text-lg font-black text-white">{{ activeQuantity }}</span>
+                <span class="px-5 text-lg font-black text-zinc-900">{{ activeQuantity }}</span>
                 <button 
                   @click="activeQuantity++" 
-                  class="w-10 h-10 rounded-lg bg-slate-800 hover:bg-slate-750 text-white font-extrabold text-lg flex items-center justify-center transition-colors"
+                  class="w-10 h-10 rounded-lg bg-white border border-zinc-200 hover:bg-zinc-100 text-zinc-800 font-extrabold text-lg flex items-center justify-center"
                 >
                   ＋
                 </button>
@@ -1204,10 +1204,10 @@ const submitOrder = async () => {
               <!-- Add button -->
               <button 
                 @click="addActiveToCart"
-                :class="`flex-1 text-white font-black py-3 px-4 rounded-xl flex items-center justify-between shadow-lg transition-colors ${
+                :class="`flex-1 text-white font-black py-3.5 px-4 rounded-xl flex items-center justify-between ${
                   editingCartItem
-                    ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-950/30'
-                    : 'bg-orange-600 hover:bg-orange-500 shadow-orange-950/30'
+                    ? 'bg-amber-600 hover:bg-amber-700'
+                    : 'bg-orange-600 hover:bg-orange-500'
                 }`"
               >
                 <span>{{ editingCartItem ? '💾 บันทึกการแก้ไข' : '➕ ใส่บิลนี้' }}</span>
@@ -1221,17 +1221,17 @@ const submitOrder = async () => {
         <!-- SECTION 2: Receipt / Cart Billing Panel (Full space when no menu is selected) -->
         <div 
           v-if="!selectedMenu"
-          class="flex flex-col overflow-hidden min-h-0 bg-slate-900 h-full"
+          class="flex flex-col overflow-hidden min-h-0 bg-white h-full border-l border-zinc-200"
         >
           
           <!-- Tabs Header -->
-          <div class="bg-slate-850 border-b border-slate-800 flex flex-shrink-0">
+          <div class="bg-zinc-50 border-b border-zinc-200 flex flex-shrink-0">
             <button 
               @click="activeTab = 'cart'"
-              :class="`flex-1 py-3 px-4 text-xs font-extrabold tracking-wider uppercase border-b-2 transition-all flex items-center justify-center gap-2 ${
+              :class="`flex-1 py-3.5 px-4 text-xs font-black tracking-wider uppercase border-b-2 flex items-center justify-center gap-2 ${
                 activeTab === 'cart' 
-                  ? 'border-orange-500 text-orange-400 bg-slate-900/40' 
-                  : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                  ? 'border-orange-600 text-orange-600 bg-white' 
+                  : 'border-transparent text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100'
               }`"
             >
               <span>🛒 ตะกร้าสินค้า</span>
@@ -1241,10 +1241,10 @@ const submitOrder = async () => {
             </button>
             <button 
               @click="activeTab = 'active_orders'"
-              :class="`flex-1 py-3 px-4 text-xs font-extrabold tracking-wider uppercase border-b-2 transition-all flex items-center justify-center gap-2 ${
+              :class="`flex-1 py-3.5 px-4 text-xs font-black tracking-wider uppercase border-b-2 flex items-center justify-center gap-2 ${
                 activeTab === 'active_orders' 
-                  ? 'border-orange-500 text-orange-400 bg-slate-900/40' 
-                  : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                  ? 'border-orange-600 text-orange-600 bg-white' 
+                  : 'border-transparent text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100'
               }`"
             >
               <span>⏳ ออเดอร์ค้าง ({{ activeOrders.length }})</span>
@@ -1254,23 +1254,23 @@ const submitOrder = async () => {
           <!-- Tab Content: Cart -->
           <div v-if="activeTab === 'cart'" class="flex-1 flex flex-col min-h-0 overflow-hidden">
             <!-- Editing Banner -->
-            <div v-if="editingOrderId" class="bg-amber-950/80 border-b border-amber-900 text-amber-300 px-4 py-2 text-xs flex items-center justify-between font-sans flex-shrink-0">
+            <div v-if="editingOrderId" class="bg-amber-50 border-b border-amber-200 text-amber-800 px-4 py-2 text-xs flex items-center justify-between font-sans flex-shrink-0">
               <span>⚠️ กำลังแก้ไขออเดอร์ <b>#{{ editingOrderId }}</b></span>
               <button 
                 @click="cancelEdit" 
-                class="bg-amber-900/80 hover:bg-amber-850 px-2.5 py-1 rounded text-white font-bold transition-colors text-[10px]"
+                class="bg-amber-600 hover:bg-amber-700 px-2.5 py-1 rounded text-white font-bold text-[10px]"
               >
                 ยกเลิกแก้ไข
               </button>
             </div>
 
             <!-- Empty Cart state -->
-            <div v-if="cart.length === 0" class="flex-1 flex flex-col items-center justify-center text-center p-6 bg-slate-950/20">
-              <p v-if="orderSuccess" class="text-emerald-400 font-bold mb-1">🎉 บันทึกออร์เดอร์ #{{ submittedOrderId }} สำเร็จ!</p>
-              <p v-if="orderSuccess" class="text-xs text-slate-400">บิลส่งตรงไปครัวเรียบร้อย</p>
+            <div v-if="cart.length === 0" class="flex-1 flex flex-col items-center justify-center text-center p-6 bg-zinc-50">
+              <p v-if="orderSuccess" class="text-green-600 font-black mb-1">🎉 บันทึกออร์เดอร์ #{{ submittedOrderId }} สำเร็จ!</p>
+              <p v-if="orderSuccess" class="text-xs text-zinc-505">บิลส่งตรงไปครัวเรียบร้อย</p>
               <div v-else>
                 <span class="text-3xl block mb-2 opacity-50">🛒</span>
-                <p class="text-slate-500 text-sm font-medium">ยังไม่มีรายการชงหรือทำอาหารในบิลนี้</p>
+                <p class="text-zinc-400 text-sm font-medium">ยังไม่มีรายการชงหรือทำอาหารในบิลนี้</p>
               </div>
             </div>
 
@@ -1278,7 +1278,7 @@ const submitOrder = async () => {
             <div v-else class="flex-1 overflow-y-auto p-3 space-y-4 min-h-0">
               <div v-for="group in groupedCart" :key="group.category.id || 'unknown'" class="space-y-1.5">
                 <!-- Category Header Tag -->
-                <div class="text-[11px] uppercase tracking-wider font-extrabold text-orange-400 px-1.5 py-0.5 bg-slate-950/40 rounded flex items-center gap-1 font-sans">
+                <div class="text-[11px] uppercase tracking-wider font-extrabold text-orange-700 px-2 py-1 bg-orange-50 rounded flex items-center gap-1 font-sans">
                   <span>{{ group.category.icon }}</span>
                   <span>{{ group.category.name === 'Food' ? 'อาหาร' : group.category.name === 'Beverage' ? 'เครื่องดื่ม' : group.category.name === 'Dessert' ? 'ของหวาน' : group.category.name }}</span>
                 </div>
@@ -1287,27 +1287,27 @@ const submitOrder = async () => {
                 <div 
                   v-for="item in group.items" 
                   :key="item.menuId + '-' + JSON.stringify(item.selectedOptions) + '-' + item.notes + '-' + (item.discount || 0)"
-                  class="bg-slate-950/70 p-3 rounded-xl border border-slate-800 flex items-center justify-between gap-3 text-sm animate-fade-in hover:border-orange-500/50 cursor-pointer active:scale-[0.99] transition-all"
+                  class="bg-white p-3.5 rounded-xl border border-zinc-200 flex items-center justify-between gap-3 text-sm animate-fade-in hover:border-zinc-350 hover:bg-zinc-50 cursor-pointer active:scale-[0.99]"
                   @click="editCartItemConfig(item)"
                 >
                   <div class="flex-1 min-w-0">
                     <div class="flex items-baseline gap-1.5">
-                      <span class="font-extrabold text-white text-sm">{{ item.menuName }}</span>
-                      <span class="text-xs text-slate-400">x{{ item.quantity }}</span>
+                      <span class="font-black text-zinc-900 text-sm">{{ item.menuName }}</span>
+                      <span class="text-xs text-zinc-505">x{{ item.quantity }}</span>
                     </div>
                     
                     <!-- Print config detail options -->
                     <div class="flex flex-wrap gap-1.5 mt-1 text-[11px] font-sans">
-                      <span v-if="item.proteinType" class="bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded">
+                      <span v-if="item.proteinType" class="bg-zinc-100 text-zinc-700 px-1.5 py-0.5 rounded font-semibold text-[10px]">
                         🥩 {{ item.proteinType }}{{ item.isSpecial ? ' (พิเศษ)' : '' }}
                       </span>
-                      <span v-for="opt in item.selectedOptions" :key="opt.optionId" class="bg-slate-850 text-orange-400 px-1.5 py-0.5 rounded border border-orange-950/40">
+                      <span v-for="opt in item.selectedOptions" :key="opt.optionId" class="bg-orange-50 text-orange-700 px-1.5 py-0.5 rounded border border-orange-200 text-[10px]">
                         + {{ opt.label }}
                       </span>
-                      <span v-if="item.discount > 0" class="bg-emerald-955/40 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-950/40 font-bold">
+                      <span v-if="item.discount > 0" class="bg-green-50 text-green-700 px-1.5 py-0.5 rounded border border-green-200 font-extrabold text-[10px]">
                         💸 ส่วนลด -฿{{ item.discount }}
                       </span>
-                      <span v-if="item.notes" class="text-slate-400 font-medium italic block w-full mt-0.5">
+                      <span v-if="item.notes" class="text-zinc-505 font-medium italic block w-full mt-0.5">
                         📝 {{ item.notes }}
                       </span>
                     </div>
@@ -1315,10 +1315,10 @@ const submitOrder = async () => {
 
                   <!-- Price & Remove button -->
                   <div class="flex items-center gap-3">
-                    <span class="font-black text-white">฿{{ item.totalPrice * item.quantity }}</span>
+                    <span class="font-black text-zinc-900">฿{{ item.totalPrice * item.quantity }}</span>
                     <button 
                       @click.stop="removeFromCart(item)"
-                      class="text-red-500 hover:text-red-400 font-bold p-1 bg-red-950/30 hover:bg-red-950/60 rounded transition-colors"
+                      class="text-red-650 hover:bg-red-50 p-1.5 rounded-lg active:scale-90"
                       title="ลบ"
                     >
                       🗑️
@@ -1329,18 +1329,18 @@ const submitOrder = async () => {
             </div>
 
             <!-- Checkout / Action Footer block -->
-            <div v-if="cart.length > 0" class="p-4 bg-slate-850 border-t border-slate-800 space-y-3 flex-shrink-0">
+            <div v-if="cart.length > 0" class="p-4 bg-zinc-50 border-t border-zinc-200 space-y-3 flex-shrink-0">
               <!-- Summary Row -->
               <div class="flex items-center justify-between">
                 <input 
                   v-model="tableNumber"
                   type="text" 
                   placeholder="ระบุเบอร์โต๊ะ (ถ้ามี)..."
-                  class="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white w-32 focus:outline-none focus:border-orange-500 text-xs font-sans"
+                  class="bg-white border border-zinc-300 rounded-xl px-3 py-2 text-zinc-900 w-32 focus:outline-none focus:border-orange-655 focus:ring-1 focus:ring-orange-655 text-xs font-sans font-medium"
                 />
                 <div class="text-right">
-                  <span class="text-slate-400 block text-[10px] font-sans">ราคารวมทั้งบิล</span>
-                  <span class="text-2xl font-black text-emerald-400">฿{{ cartTotalPrice }}</span>
+                  <span class="text-zinc-500 block text-[10px] font-sans font-bold">ราคารวมทั้งบิล</span>
+                  <span class="text-2xl font-black text-green-600">฿{{ cartTotalPrice }}</span>
                 </div>
               </div>
 
@@ -1348,7 +1348,7 @@ const submitOrder = async () => {
               <div class="flex gap-2">
                 <button 
                   @click="clearCart"
-                  class="bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold py-3.5 px-4 rounded-xl border border-slate-750 active:scale-95 transition-all text-sm font-sans"
+                  class="bg-white hover:bg-zinc-100 text-zinc-700 font-bold py-3.5 px-4 rounded-xl border border-zinc-250 active:scale-95 text-sm font-sans"
                 >
                   ล้างบิล
                 </button>
@@ -1356,10 +1356,10 @@ const submitOrder = async () => {
                 <button 
                   @click="submitOrder"
                   :disabled="isSubmitting"
-                  :class="`flex-1 disabled:opacity-50 text-white font-black py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all text-base font-sans ${
+                  :class="`flex-1 disabled:opacity-50 text-white font-black py-3.5 rounded-xl flex items-center justify-center gap-2 active:scale-95 text-base font-sans ${
                     editingOrderId 
-                      ? 'bg-amber-650 hover:bg-amber-600 shadow-amber-950/30' 
-                      : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-950/30'
+                      ? 'bg-amber-600 hover:bg-amber-700' 
+                      : 'bg-green-600 hover:bg-green-700'
                   }`"
                 >
                   <span v-if="isSubmitting" class="animate-spin text-sm">⏳</span>
@@ -1372,9 +1372,9 @@ const submitOrder = async () => {
           <!-- Tab Content: Active Orders -->
           <div v-else-if="activeTab === 'active_orders'" class="flex-1 flex flex-col min-h-0 overflow-hidden">
             <!-- Empty Active Orders state -->
-            <div v-if="activeOrders.length === 0" class="flex-1 flex flex-col items-center justify-center text-center p-6 bg-slate-950/20">
+            <div v-if="activeOrders.length === 0" class="flex-1 flex flex-col items-center justify-center text-center p-6 bg-zinc-50">
               <span class="text-3xl block mb-2 opacity-50">📋</span>
-              <p class="text-slate-500 text-sm font-medium">ไม่มีออเดอร์ค้างเตรียมในระบบ</p>
+              <p class="text-zinc-400 text-sm font-medium">ไม่มีออเดอร์ค้างเตรียมในระบบ</p>
             </div>
 
             <!-- Active Orders List -->
@@ -1382,39 +1382,39 @@ const submitOrder = async () => {
               <div 
                 v-for="order in activeOrders" 
                 :key="order.id"
-                :class="`bg-slate-950/70 p-3 rounded-2xl border transition-all duration-200 ${
+                :class="`bg-white p-3.5 rounded-2xl border ${
                   editingOrderId === order.id 
-                    ? 'border-amber-500 bg-amber-950/10' 
-                    : 'border-slate-800'
+                    ? 'border-amber-500 bg-amber-50' 
+                    : 'border-zinc-200'
                 }`"
               >
                 <div class="flex items-center justify-between mb-2">
-                  <span class="font-extrabold text-white flex items-center gap-1.5">
+                  <span class="font-extrabold text-zinc-900 flex items-center gap-1.5">
                     <span>#{{ order.id }}</span>
-                    <span class="text-xs text-slate-400 font-normal">({{ order.location || 'POS หน้าร้าน' }})</span>
+                    <span class="text-xs text-zinc-505 font-normal">(${order.location || 'POS หน้าร้าน'})</span>
                   </span>
-                  <span :class="`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
-                    order.status === 'Pending' ? 'bg-amber-950 text-amber-400 border border-amber-900/40' :
-                    order.status === 'Cooking' ? 'bg-blue-950 text-blue-400 border border-blue-900/40' :
-                    'bg-emerald-950 text-emerald-400 border border-emerald-900/40'
+                  <span :class="`text-[10px] px-2.5 py-1 rounded-full font-extrabold uppercase border ${
+                    order.status === 'Pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                    order.status === 'Cooking' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                    'bg-green-50 text-green-700 border-green-200'
                   }`">
                     {{ order.status === 'Pending' ? 'รอทำ' : order.status === 'Cooking' ? 'กำลังปรุง' : 'เสร็จแล้ว' }}
                   </span>
                 </div>
 
                 <!-- Order Items list -->
-                <div class="text-xs text-slate-300 space-y-1 pl-1 py-1.5 border-t border-b border-slate-800/50 my-2 font-sans">
+                <div class="text-xs text-zinc-700 space-y-1.5 pl-1 py-2 border-t border-b border-zinc-200 my-2 font-sans">
                   <div v-for="item in order.items" :key="item.id" class="leading-relaxed">
-                    <span class="font-bold text-white">{{ item.menu_name }}</span>
-                    <span class="text-slate-400 font-semibold ml-1">x{{ item.quantity }}</span>
-                    <div class="pl-2 text-[10px] text-slate-400 font-sans flex flex-wrap gap-1 mt-0.5">
-                      <span v-if="item.protein_type" class="bg-slate-800 text-slate-300 px-1 py-0.2 rounded text-[9px]">
+                    <span class="font-bold text-zinc-900">{{ item.menu_name }}</span>
+                    <span class="text-zinc-505 font-bold ml-1">x{{ item.quantity }}</span>
+                    <div class="pl-2 text-[10px] text-zinc-505 font-sans flex flex-wrap gap-1 mt-0.5">
+                      <span v-if="item.protein_type" class="bg-zinc-100 text-zinc-700 px-1.5 py-0.5 rounded text-[9px] font-semibold">
                         🥩 {{ item.protein_type }}{{ item.is_special ? ' (พิเศษ)' : '' }}{{ item.is_takeaway ? ' (กล่อง)' : '' }}
                       </span>
-                      <span v-for="opt in item.options" :key="opt.option_id" class="bg-slate-850 text-orange-400 px-1 py-0.2 rounded text-[9px] border border-orange-950/20">
+                      <span v-for="opt in item.options" :key="opt.option_id" class="bg-orange-50 text-orange-700 px-1.5 py-0.5 rounded text-[9px] font-semibold border border-orange-200">
                         + {{ opt.label }}
                       </span>
-                      <span v-if="item.notes" class="text-slate-400 italic block w-full">
+                      <span v-if="item.notes" class="text-zinc-505 italic block w-full">
                         📝 {{ item.notes }}
                       </span>
                     </div>
@@ -1422,29 +1422,29 @@ const submitOrder = async () => {
                 </div>
 
                 <div class="flex items-center justify-between mb-3 text-xs font-sans">
-                  <span class="text-slate-400">ราคารวม: <span class="font-black text-emerald-400 text-sm">฿{{ order.total_price }}</span></span>
-                  <span class="font-mono text-slate-500">{{ formatOrderTime(order.created_at) }}</span>
+                  <span class="text-zinc-505 font-medium">ราคารวม: <span class="font-black text-green-600 text-sm">฿{{ order.total_price }}</span></span>
+                  <span class="font-mono text-zinc-400">{{ formatOrderTime(order.created_at) }}</span>
                 </div>
 
                 <!-- Actions buttons -->
                 <div class="grid grid-cols-3 gap-1.5">
                   <button 
                     @click="archiveOrder(order.id)"
-                    class="bg-emerald-700 hover:bg-emerald-600 text-white text-[11px] font-bold py-2 px-1 rounded-xl transition-all active:scale-95"
+                    class="bg-green-600 hover:bg-green-700 text-white text-[11px] font-extrabold py-2 px-1 rounded-xl active:scale-95"
                     title="เก็บประวัติออเดอร์นี้"
                   >
                     📥 เก็บ (Archive)
                   </button>
                   <button 
                     @click="editOrder(order)"
-                    class="bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-bold py-2 px-1 rounded-xl transition-all active:scale-95"
+                    class="bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-extrabold py-2 px-1 rounded-xl active:scale-95"
                     title="แก้ไขหรือเพิ่มรายการอาหาร"
                   >
                     ✏️ แก้ไข/เพิ่ม
                   </button>
                   <button 
                     @click="printActiveOrderReceipt(order)"
-                    class="bg-slate-700 hover:bg-slate-650 text-slate-200 text-[11px] font-bold py-2 px-1 rounded-xl transition-all active:scale-95"
+                    class="bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-250 text-[11px] font-extrabold py-2 px-1 rounded-xl active:scale-95"
                     title="พิมพ์ใบเสร็จออเดอร์นี้"
                   >
                     🖨️ ใบเสร็จ
@@ -1464,18 +1464,18 @@ const submitOrder = async () => {
     <Transition name="fade">
       <div v-if="showReceiptModal && receiptData" class="fixed inset-0 z-50 flex items-center justify-center p-4">
         <!-- Backdrop -->
-        <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" @click="showReceiptModal = false"></div>
+        <div class="absolute inset-0 bg-zinc-900/60" @click="showReceiptModal = false"></div>
         
         <!-- Modal Content -->
-        <div class="relative bg-slate-900 border border-slate-700/80 rounded-3xl shadow-2xl p-6 max-w-sm w-full z-10 flex flex-col max-h-[90vh] animate-fade-in">
-          <div class="text-center border-b border-slate-800 pb-3 mb-4">
+        <div class="relative bg-white border border-zinc-200 rounded-3xl p-6 max-w-sm w-full z-10 flex flex-col max-h-[90vh] animate-fade-in">
+          <div class="text-center border-b border-zinc-200 pb-3 mb-4">
             <span class="text-3xl">🧾</span>
-            <h3 class="text-lg font-bold text-white mt-1">ตัวอย่างใบเสร็จ</h3>
-            <p class="text-xs text-slate-400">ออร์เดอร์ #{{ receiptData.orderId }} บันทึกสำเร็จ</p>
+            <h3 class="text-lg font-black text-zinc-900 mt-1">ตัวอย่างใบเสร็จ</h3>
+            <p class="text-xs text-zinc-505 font-medium">ออร์เดอร์ #{{ receiptData.orderId }} บันทึกสำเร็จ</p>
           </div>
           
           <!-- Receipt Paper Slip Preview (White Paper style for visual realism) -->
-          <div class="flex-1 overflow-y-auto bg-white text-slate-900 p-4 rounded-xl font-mono text-xs shadow-inner select-none border border-slate-200">
+          <div class="flex-1 overflow-y-auto bg-white text-zinc-900 p-4 rounded-xl font-mono text-xs select-none border border-zinc-300">
             <div class="text-center font-bold text-sm mb-1">🍜☕ POS Counter</div>
             <div class="text-center text-[10px] text-slate-500 mb-2">ใบสั่งสินค้า / ใบเสร็จรับเงิน</div>
             
@@ -1490,7 +1490,7 @@ const submitOrder = async () => {
             <div class="space-y-3">
               <div v-for="group in groupedReceiptData" :key="group.category.id || 'unknown'">
                 <!-- Category Heading inside thermal preview -->
-                <div class="text-[10px] font-black text-slate-500 border-b border-dashed border-slate-350 pb-0.5 mb-1.5">
+                <div class="text-[10px] font-black text-zinc-500 border-b border-dashed border-zinc-300 pb-0.5 mb-1.5">
                   {{ group.category.icon }} {{ group.category.name === 'Food' ? 'อาหาร' : group.category.name === 'Beverage' ? 'เครื่องดื่ม' : group.category.name === 'Dessert' ? 'ของหวาน' : group.category.name }}
                 </div>
                 
@@ -1501,12 +1501,12 @@ const submitOrder = async () => {
                     <span class="w-[15%] text-center">x{{ item.quantity }}</span>
                     <span class="w-[25%] text-right">฿{{ item.totalPrice * item.quantity }}</span>
                   </div>
-                  <div class="pl-2 text-[10px] text-slate-600 font-mono">
+                  <div class="pl-2 text-[10px] text-zinc-650 font-mono">
                     <span v-if="item.proteinType">🥩 {{ item.proteinType }}{{ item.isSpecial ? ' (พิเศษ)' : '' }}</span>
                     <div v-for="opt in item.selectedOptions" :key="opt.optionId">
                       + {{ opt.label }}
                     </div>
-                    <div v-if="item.discount > 0" class="text-emerald-600 font-bold">
+                    <div v-if="item.discount > 0" class="text-green-600 font-bold">
                       💸 ส่วนลด -฿{{ item.discount }}
                     </div>
                     <div v-if="item.notes" class="italic font-sans">📝 {{ item.notes }}</div>
@@ -1528,16 +1528,16 @@ const submitOrder = async () => {
           </div>
           
           <!-- Action Buttons -->
-          <div class="grid grid-cols-2 gap-3 mt-5 pt-3 border-t border-slate-800 flex-shrink-0">
+          <div class="grid grid-cols-2 gap-3 mt-5 pt-3 border-t border-zinc-200 flex-shrink-0">
             <button 
               @click="showReceiptModal = false"
-              class="py-3 bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold rounded-xl text-sm transition-colors active:scale-95"
+              class="py-3 bg-white hover:bg-zinc-100 text-zinc-700 font-bold rounded-xl text-sm border border-zinc-200 active:scale-95 transition-all"
             >
               ✕ ปิดหน้าต่าง
             </button>
             <button 
               @click="printReceipt"
-              class="py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-sm transition-all flex items-center justify-center gap-1.5 active:scale-95 shadow-lg shadow-emerald-950/40"
+              class="py-3 bg-green-600 hover:bg-green-700 text-white font-extrabold rounded-xl text-sm flex items-center justify-center gap-1.5 active:scale-95 transition-all"
             >
               <span>🖨️ พิมพ์ใบเสร็จ</span>
             </button>
@@ -1611,14 +1611,14 @@ const submitOrder = async () => {
   width: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: #020617;
+  background: #f4f4f5;
 }
 ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: #d4d4d8;
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: #a1a1aa;
 }
 
 /* Print Media stylesheet */
@@ -1683,7 +1683,7 @@ const submitOrder = async () => {
     height: 100vh !important;
     max-height: 100vh !important;
     z-index: 9999 !important;
-    background-color: #0f172a !important; /* bg-slate-900 */
+    background-color: #ffffff !important; /* bg-white */
     border: none !important;
   }
 }
