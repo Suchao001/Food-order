@@ -1,46 +1,520 @@
 <script setup lang="ts">
-// Fetch menus and options
-const { data: menuResult } = await useFetch('/api/menus')
-const { data: optionResult } = await useFetch('/api/options')
+import { ref, computed, reactive, watch } from 'vue'
 
-const menus = computed(() => menuResult.value?.data || [])
-const options = computed(() => optionResult.value?.data || [])
+definePageMeta({
+  layout: 'default'
+})
 
-// Cart state: array of cart items
+// 1. Data Fetching
+const { data: menuResult, pending: menusPending } = await useFetch<{ success: boolean, data: any[] }>('/api/menus')
+const { data: categoryResult } = await useFetch<{ success: boolean, data: any[] }>('/api/categories')
+
+const allMenus = computed(() => menuResult.value?.data || [])
+const categories = computed(() => categoryResult.value?.data || [])
+
+// Compute all menus, but dynamically split beverage items with temperature options
+const processedMenus = computed(() => {
+  const list: any[] = []
+  
+  allMenus.value.forEach((menu: any) => {
+    // Check if it's a beverage (dept === 'Barista') and has options
+    if (menu.dept === 'Barista' && menu.options && Array.isArray(menu.options)) {
+      // Exclude blended ('ปั่น') options
+      const tempOpts = menu.options.filter((o: any) => o.option_group === 'temperature' && o.label !== 'ปั่น')
+      
+      if (tempOpts.length > 0) {
+        // Sort temp options: 'ร้อน' first, then 'เย็น'
+        const order = { 'ร้อน': 1, 'เย็น': 2 }
+        const sortedTempOpts = [...tempOpts].sort((a: any, b: any) => (order[a.label] || 99) - (order[b.label] || 99))
+        
+        sortedTempOpts.forEach((opt: any) => {
+          list.push({
+            ...menu,
+            clientUniqueId: `${menu.id}-${opt.id}`,
+            name: `${menu.name} [${opt.label}]`,
+            originalName: menu.name,
+            base_price: Number(menu.base_price) + Number(opt.extra_price),
+            base_price_raw: Number(menu.base_price),
+            preSelectedTempOptionId: opt.id
+          })
+        })
+        return
+      }
+    }
+    
+    list.push({
+      ...menu,
+      clientUniqueId: `menu-${menu.id}`
+    })
+  })
+  
+  return list
+})
+
+// Cart Item Interface matching original POS schema
 interface CartItem {
   menuId: number
   menuName: string
   basePrice: number
   selectedOptions: { optionId: number, quantity: number, label: string, extraPrice: number }[]
-  totalPrice: number
+  totalPrice: number // item price (base + extras)
   quantity: number
   isTakeaway: boolean
   isSpecial: boolean
   notes: string
-  proteinType: string
+  proteinType: string // For food items
+  categoryId: number
+  discount: number
 }
 
+// 2. State Management
 const cart = ref<CartItem[]>([])
+const activeCategory = ref<number | 'all'>('all')
+const search = ref('')
+const showImages = ref(true)
 
-// Modal state
-const showModal = ref(false)
+const beverageTempFilter = ref<'hot' | 'cold' | 'all'>('cold')
+
+const beverageCategoryId = computed(() => {
+  const bevCat = categories.value.find(c => c.name === 'Beverage')
+  return bevCat ? bevCat.id : null
+})
+
+watch(activeCategory, (newCat) => {
+  if (newCat === beverageCategoryId.value) {
+    beverageTempFilter.value = 'cold'
+  }
+})
+
+// Persist the showImages preference
+if (import.meta.client) {
+  const savedVal = localStorage.getItem('pos:show-images')
+  if (savedVal !== null) {
+    showImages.value = savedVal === 'true'
+  }
+}
+
+const toggleShowImages = () => {
+  showImages.value = !showImages.value
+  if (import.meta.client) {
+    localStorage.setItem('pos:show-images', String(showImages.value))
+  }
+}
+
+// Active item configuration (Modifier Panel)
 const selectedMenu = ref<any>(null)
-const optionQuantities = reactive<Record<number, number>>({})
-const dishQuantity = ref(1)
-const editingIndex = ref<number | null>(null)
+const activeItemOptions = ref<any[]>([])
+const activeOptionsPending = ref(false)
 
-// Extra options
+// Selections for the active item
+const selectedOptionsState = reactive<Record<number, boolean>>({}) // For checkboxes / multi-select options
+const selectedSingleOptionsState = reactive<Record<string, number>>({}) // For radio-like groups (temperature, sweetness, milk_type)
+const activeQuantity = ref(1)
 const isTakeaway = ref(false)
-const isSpecial = ref(false)
-const specialPrice = 10
+const isSpecial = ref(false) // Food special (+10)
+const selectedProtein = ref('หมู') // Food protein
 const notes = ref('')
 
-// Protein selector
-const proteins = ['หมู', 'หมูสับ', 'หมูชิ้น', 'ไก่']
-const selectedProtein = ref('หมู')
+// Discount state (built-in POS feature)
+const discountAmount = ref(0) // default to 0 (no discount)
+const isCustomDiscount = ref(false)
+const customDiscountInput = ref<number | null>(null)
 
-// Quick note presets
-const quickNotes = ['เผ็ดมาก', 'เผ็ดน้อย', 'ไม่เผ็ด', 'ข้าวน้อย', 'ข้าวมาก', 'ไม่ใส่ผัก', 'ไม่ใส่หอม']
+const selectDiscountPreset = (preset: number) => {
+  isCustomDiscount.value = false
+  discountAmount.value = preset
+  customDiscountInput.value = null
+}
+
+const enableCustomDiscount = () => {
+  isCustomDiscount.value = true
+  discountAmount.value = Number(customDiscountInput.value || 0)
+}
+
+const handleCustomDiscountInput = () => {
+  if (isCustomDiscount.value) {
+    discountAmount.value = Math.max(0, Number(customDiscountInput.value || 0))
+  }
+}
+
+// Cart item inline editing state
+const editingCartItem = ref<CartItem | null>(null)
+
+watch(selectedMenu, (newVal) => {
+  if (!newVal) {
+    editingCartItem.value = null
+  }
+})
+
+const editCartItemConfig = async (item: CartItem) => {
+  // Find the menu object from allMenus
+  const menu = allMenus.value.find((m: any) => m.id === item.menuId)
+  if (!menu) return
+
+  // Set active item state
+  selectedMenu.value = menu
+  activeQuantity.value = item.quantity
+  isTakeaway.value = item.isTakeaway
+  isSpecial.value = item.isSpecial
+  selectedProtein.value = item.proteinType || 'หมู'
+  notes.value = item.notes
+  
+  // Clear states
+  Object.keys(selectedOptionsState).forEach(key => delete selectedOptionsState[Number(key)])
+  Object.keys(selectedSingleOptionsState).forEach(key => delete selectedSingleOptionsState[key])
+
+  // Set discount from item
+  discountAmount.value = item.discount || 0
+  isCustomDiscount.value = ![0, 10, 20].includes(item.discount)
+  customDiscountInput.value = isCustomDiscount.value ? item.discount : null
+
+  editingCartItem.value = item
+
+  activeOptionsPending.value = true
+  try {
+    const response = await $fetch<{ success: boolean, data: any[] }>(`/api/menus/${item.menuId}/options`)
+    let menuOpts: any[] = []
+    if (response.success) {
+      menuOpts = response.data.filter((o: any) => !(o.option_group === 'temperature' && o.label === 'ปั่น'))
+    }
+    
+    activeItemOptions.value = menuOpts
+
+    // Pre-select options that were saved on the cart item
+    item.selectedOptions.forEach(opt => {
+      const optionInfo = activeItemOptions.value.find(o => o.id === opt.optionId)
+      if (optionInfo) {
+        if (['temperature', 'sweetness', 'milk_type'].includes(optionInfo.option_group)) {
+          selectedSingleOptionsState[optionInfo.option_group] = opt.optionId
+        } else if (optionInfo.option_group === 'addons') {
+          selectedOptionsState[opt.optionId] = true
+        }
+      }
+    })
+
+    // If any group doesn't have a selection, select defaults
+    const groups = ['temperature', 'sweetness', 'milk_type']
+    groups.forEach(g => {
+      if (selectedSingleOptionsState[g] === undefined) {
+        const opts = activeItemOptions.value.filter(o => o.option_group === g)
+        if (opts.length > 0) {
+          if (g === 'temperature' && menu.preSelectedTempOptionId) {
+            selectedSingleOptionsState[g] = menu.preSelectedTempOptionId
+          } else {
+            const defaultOpt = opts.find(o => Number(o.extra_price) === 0) || opts[0]
+            selectedSingleOptionsState[g] = defaultOpt.id
+          }
+        }
+      }
+    })
+
+  } catch (error) {
+    console.error('Failed to load menu options for editing:', error)
+  } finally {
+    activeOptionsPending.value = false
+  }
+}
+
+// Food options presets
+const proteins = ['หมู', 'หมูสับ', 'หมูชิ้น', 'ไก่', 'ทะเล', 'เนื้อ']
+const quickNotes = ['เผ็ดน้อย', 'ไม่เผ็ด', 'ข้าวน้อย', 'ไม่ใส่ผัก', 'หวานน้อย', 'วิปครีมเยอะๆ']
+
+// 3. Computed Lists
+const filteredMenus = computed(() => {
+  let list = processedMenus.value
+  
+  if (activeCategory.value !== 'all') {
+    list = list.filter(m => m.category_id === activeCategory.value)
+    
+    // Apply temperature filter if viewing Beverages
+    if (activeCategory.value === beverageCategoryId.value) {
+      if (beverageTempFilter.value === 'cold') {
+        list = list.filter(m => {
+          if (!m.preSelectedTempOptionId) return true // Keep drinks without temp options
+          const opt = m.options?.find((o: any) => o.id === m.preSelectedTempOptionId)
+          return opt && opt.label === 'เย็น'
+        })
+      } else if (beverageTempFilter.value === 'hot') {
+        list = list.filter(m => {
+          if (!m.preSelectedTempOptionId) return false
+          const opt = m.options?.find((o: any) => o.id === m.preSelectedTempOptionId)
+          return opt && opt.label === 'ร้อน'
+        })
+      }
+    }
+  }
+  
+  if (search.value.trim()) {
+    const q = search.value.toLowerCase()
+    list = list.filter(m => m.name.toLowerCase().includes(q))
+  }
+  
+  return list
+})
+
+// Group active options by option_group for rendering
+const groupedActiveOptions = computed(() => {
+  const groups: Record<string, any[]> = {}
+  activeItemOptions.value.forEach(opt => {
+    const g = opt.option_group || 'other'
+    if (!groups[g]) groups[g] = []
+    groups[g].push(opt)
+  })
+  return groups
+})
+
+// Dynamic name mapping for option groups in Thai
+const groupNameThai = (group: string) => {
+  switch (group) {
+    case 'temperature': return '🧊 อุณหภูมิ ( Temperature )'
+    case 'sweetness': return '🍬 ระดับความหวาน ( Sweetness )'
+    case 'milk_type': return '🥛 ประเภทนม ( Milk Option )'
+    case 'addons': return '➕ เพิ่มเติม ( Add-ons )'
+    case 'discount': return '💸 ส่วนลดราคา ( Discount )'
+    default: return '⚙️ ตัวเลือกเพิ่มเติม ( Custom Options )'
+  }
+}
+
+// Calculate price of the active item (base + selected options + special - discount)
+const activeItemSinglePrice = computed(() => {
+  if (!selectedMenu.value) return 0
+  let total = Number(selectedMenu.value.base_price_raw !== undefined ? selectedMenu.value.base_price_raw : selectedMenu.value.base_price)
+
+  // 1. Add price from radio-like single selections (temperature, sweetness, milk_type)
+  Object.values(selectedSingleOptionsState).forEach(optId => {
+    const opt = activeItemOptions.value.find(o => o.id === optId)
+    if (opt) total += Number(opt.extra_price)
+  })
+
+  // 2. Add price from checkbox-like multi selections (addons)
+  activeItemOptions.value.forEach(opt => {
+    if (opt.option_group === 'addons' && selectedOptionsState[opt.id]) {
+      total += Number(opt.extra_price)
+    }
+  })
+
+  // 3. Add food special pricing
+  if (isSpecial.value && selectedMenu.value.dept === 'Kitchen') {
+    total += 10
+  }
+
+  // 4. Subtract discount
+  total -= discountAmount.value
+
+  return Math.max(0, total) // Prevent price from going below zero
+})
+
+const activeItemTotalPrice = computed(() => {
+  return activeItemSinglePrice.value * activeQuantity.value
+})
+
+// Cart Totals
+const cartTotalItems = computed(() => {
+  return cart.value.reduce((sum, item) => sum + item.quantity, 0)
+})
+
+const cartTotalPrice = computed(() => {
+  return cart.value.reduce((sum, item) => sum + (item.totalPrice * item.quantity), 0)
+})
+
+// Group cart items by category for structured receipt lists
+const groupedCart = computed(() => {
+  const groups: { category: any, items: CartItem[] }[] = []
+  
+  categories.value.forEach(cat => {
+    const items = cart.value.filter(item => item.categoryId === cat.id)
+    if (items.length > 0) {
+      groups.push({
+        category: cat,
+        items: [...items].sort((a, b) => a.menuName.localeCompare(b.menuName, 'th'))
+      })
+    }
+  })
+  
+  const knownCatIds = categories.value.map(c => c.id)
+  const unknownItems = cart.value.filter(item => !knownCatIds.includes(item.categoryId))
+  if (unknownItems.length > 0) {
+    groups.push({
+      category: { id: 0, name: 'อื่นๆ', icon: '📦' },
+      items: [...unknownItems].sort((a, b) => a.menuName.localeCompare(b.menuName, 'th'))
+    })
+  }
+  
+  return groups
+})
+
+// Sorted list to submit to the API (food first, then drinks, then desserts)
+const sortedCart = computed(() => {
+  const list: CartItem[] = []
+  groupedCart.value.forEach(g => {
+    list.push(...g.items)
+  })
+  return list
+})
+
+// Grouped submitted receipt data for modal preview and printing
+const groupedReceiptData = computed(() => {
+  if (!receiptData.value) return []
+  
+  const groups: { category: any, items: CartItem[] }[] = []
+  
+  categories.value.forEach(cat => {
+    const items = receiptData.value!.items.filter(item => item.categoryId === cat.id)
+    if (items.length > 0) {
+      groups.push({
+        category: cat,
+        items: [...items].sort((a, b) => a.menuName.localeCompare(b.menuName, 'th'))
+      })
+    }
+  })
+  
+  const knownCatIds = categories.value.map(c => c.id)
+  const unknownItems = receiptData.value!.items.filter(item => !knownCatIds.includes(item.categoryId))
+  if (unknownItems.length > 0) {
+    groups.push({
+      category: { id: 0, name: 'อื่นๆ', icon: '📦' },
+      items: [...unknownItems].sort((a, b) => a.menuName.localeCompare(b.menuName, 'th'))
+    })
+  }
+  
+  return groups
+})
+
+// 4. Methods
+// When clicking a menu item on the left panel
+const selectMenu = async (menu: any) => {
+  selectedMenu.value = menu
+  activeQuantity.value = 1
+  isTakeaway.value = false
+  isSpecial.value = false
+  selectedProtein.value = 'หมู'
+  notes.value = ''
+  activeItemOptions.value = []
+  
+  // Clear states
+  Object.keys(selectedOptionsState).forEach(key => delete selectedOptionsState[Number(key)])
+  Object.keys(selectedSingleOptionsState).forEach(key => delete selectedSingleOptionsState[key])
+
+  // Reset discount to default 0 (no discount)
+  discountAmount.value = 0
+  isCustomDiscount.value = false
+  customDiscountInput.value = null
+
+  activeOptionsPending.value = true
+  try {
+    const response = await $fetch<{ success: boolean, data: any[] }>(`/api/menus/${menu.id}/options`)
+    let menuOpts: any[] = []
+    if (response.success) {
+      // Exclude temperature option labeled 'ปั่น'
+      menuOpts = response.data.filter((o: any) => !(o.option_group === 'temperature' && o.label === 'ปั่น'))
+    }
+    
+    activeItemOptions.value = menuOpts
+
+    // Pre-select defaults for radio option groups
+    const groups = ['temperature', 'sweetness', 'milk_type']
+    groups.forEach(g => {
+      const opts = activeItemOptions.value.filter(o => o.option_group === g)
+      if (opts.length > 0) {
+        if (g === 'temperature' && menu.preSelectedTempOptionId) {
+          selectedSingleOptionsState[g] = menu.preSelectedTempOptionId
+        } else {
+          const defaultOpt = opts.find(o => Number(o.extra_price) === 0) || opts[0]
+          selectedSingleOptionsState[g] = defaultOpt.id
+        }
+      }
+    })
+  } catch (error) {
+    console.error('Failed to load menu options:', error)
+  } finally {
+    activeOptionsPending.value = false
+  }
+}
+
+// Add configured active item to cart
+const addActiveToCart = () => {
+  if (!selectedMenu.value) return
+
+  const isFood = selectedMenu.value.dept === 'Kitchen'
+
+  // Gather selected options
+  const selectedOpts: any[] = []
+
+  // Gather radio selections
+  Object.entries(selectedSingleOptionsState).forEach(([group, optId]) => {
+    const opt = activeItemOptions.value.find(o => o.id === optId)
+    if (opt && opt.id > 0) { // Exclude 'No Discount' (id = 0) which is not in DB
+      selectedOpts.push({
+        optionId: opt.id,
+        quantity: 1,
+        label: opt.label,
+        extraPrice: Number(opt.extra_price)
+      })
+    }
+  })
+
+  // Gather checkbox selections
+  activeItemOptions.value.forEach(opt => {
+    if (opt.option_group === 'addons' && selectedOptionsState[opt.id]) {
+      selectedOpts.push({
+        optionId: opt.id,
+        quantity: 1,
+        label: opt.label,
+        extraPrice: Number(opt.extra_price)
+      })
+    }
+  })
+
+  if (editingCartItem.value) {
+    // Update the item in-place
+    const item = editingCartItem.value
+    item.quantity = activeQuantity.value
+    item.isTakeaway = isTakeaway.value
+    item.isSpecial = isSpecial.value
+    item.notes = notes.value
+    item.proteinType = isFood ? selectedProtein.value : ''
+    item.selectedOptions = selectedOpts
+    item.totalPrice = activeItemSinglePrice.value
+    item.discount = discountAmount.value
+  } else {
+    // Check if item with exact same configurations already exists in cart, if so, combine quantity
+    const matchingIndex = cart.value.findIndex(item => {
+      if (item.menuId !== selectedMenu.value.id) return false
+      if (item.isTakeaway !== isTakeaway.value) return false
+      if (isFood && (item.isSpecial !== isSpecial.value || item.proteinType !== selectedProtein.value)) return false
+      if (item.notes !== notes.value) return false
+      if (item.discount !== discountAmount.value) return false
+      
+      // Compare selected options ids
+      if (item.selectedOptions.length !== selectedOpts.length) return false
+      const itemOptIds = item.selectedOptions.map(o => o.optionId).sort()
+      const currentOptIds = selectedOpts.map(o => o.optionId).sort()
+      return itemOptIds.every((id, idx) => id === currentOptIds[idx])
+    })
+
+    if (matchingIndex > -1) {
+      cart.value[matchingIndex].quantity += activeQuantity.value
+    } else {
+      cart.value.push({
+        menuId: selectedMenu.value.id,
+        menuName: selectedMenu.value.originalName || selectedMenu.value.name,
+        basePrice: Number(selectedMenu.value.base_price_raw !== undefined ? selectedMenu.value.base_price_raw : selectedMenu.value.base_price),
+        selectedOptions: selectedOpts,
+        totalPrice: activeItemSinglePrice.value,
+        quantity: activeQuantity.value,
+        isTakeaway: isTakeaway.value,
+        isSpecial: isSpecial.value,
+        notes: notes.value,
+        proteinType: isFood ? selectedProtein.value : '',
+        categoryId: selectedMenu.value.category_id,
+        discount: discountAmount.value
+      })
+    }
+  }
+
+  // Clear selections
+  selectedMenu.value = null
+}
 
 const addQuickNote = (note: string) => {
   if (notes.value) {
@@ -50,227 +524,268 @@ const addQuickNote = (note: string) => {
   }
 }
 
-const closeModal = () => {
-  showModal.value = false
-  editingIndex.value = null
-  editingOrderItem.value = null
-  selectedMenu.value = null
-}
-
-// Add directly with defaults (no modal)
-const addDirectToCart = (menu: any) => {
-  cart.value.push({
-    menuId: menu.id,
-    menuName: menu.name,
-    basePrice: Number(menu.base_price),
-    selectedOptions: [],
-    totalPrice: Number(menu.base_price),
-    quantity: 1,
-    isTakeaway: false,
-    isSpecial: false,
-    notes: '',
-    proteinType: 'หมู'
-  })
-}
-
-// Open modal when clicking card
-const openOptionsModal = (menu: any) => {
-  selectedMenu.value = menu
-  Object.keys(optionQuantities).forEach(key => delete optionQuantities[Number(key)])
-  dishQuantity.value = 1
-  isTakeaway.value = false
-  isSpecial.value = false
-  notes.value = ''
-  selectedProtein.value = 'หมู'
-  editingIndex.value = null
-  showModal.value = true
-}
-
-// Get option quantity
-const getOptionQty = (id: number) => optionQuantities[id] || 0
-
-// Increment/Decrement option
-const incrementOption = (id: number) => {
-  optionQuantities[id] = (optionQuantities[id] || 0) + 1
-}
-const decrementOption = (id: number) => {
-  if (optionQuantities[id] && optionQuantities[id] > 0) {
-    optionQuantities[id]--
+const removeFromCart = (item: CartItem) => {
+  const index = cart.value.indexOf(item)
+  if (index > -1) {
+    cart.value.splice(index, 1)
   }
 }
-
-// Calculate current item price (base + selected options + special) - per dish
-const pricePerDish = computed(() => {
-  if (!selectedMenu.value) return 0
-  let total = Number(selectedMenu.value.base_price)
-  // Add options
-  for (const opt of options.value) {
-    const qty = optionQuantities[opt.id] || 0
-    total += qty * Number(opt.extra_price)
-  }
-  // Add special
-  if (isSpecial.value) {
-    total += specialPrice
-  }
-  return total
-})
-
-// Total price including dish quantity
-const currentItemPrice = computed(() => {
-  return pricePerDish.value * dishQuantity.value
-})
-
-// Dish quantity controls
-const incrementDish = () => {
-  dishQuantity.value++
-}
-const decrementDish = () => {
-  if (dishQuantity.value > 1) dishQuantity.value--
-}
-
-// Add to cart with selected options
-const addToCart = async () => {
-  if (!selectedMenu.value) return
-
-  const selectedOpts = options.value
-    .filter((opt: any) => optionQuantities[opt.id] > 0)
-    .map((opt: any) => ({
-      optionId: opt.id,
-      quantity: optionQuantities[opt.id],
-      label: opt.label,
-      extraPrice: Number(opt.extra_price)
-    }))
-
-  // Editing a submitted order item (from tracker panel)
-  if (editingOrderItem.value) {
-    try {
-      await $fetch(`/api/orders/items/${editingOrderItem.value.itemId}`, {
-        method: 'PATCH',
-        body: {
-          quantity: dishQuantity.value,
-          notes: notes.value,
-          proteinType: selectedProtein.value,
-          isTakeaway: isTakeaway.value,
-          isSpecial: isSpecial.value,
-          itemPrice: pricePerDish.value,
-          selectedOptions: selectedOpts
-        }
-      })
-      await refreshTracker()
-    } catch (e: any) {
-      alert('แก้ไขไม่สำเร็จ: ' + (e.data?.message || e.message || 'เกิดข้อผิดพลาด'))
-    }
-    closeModal()
-    return
-  }
-
-  const newItem: CartItem = {
-    menuId: selectedMenu.value.id,
-    menuName: selectedMenu.value.name,
-    basePrice: Number(selectedMenu.value.base_price),
-    selectedOptions: selectedOpts,
-    totalPrice: pricePerDish.value,
-    quantity: dishQuantity.value,
-    isTakeaway: isTakeaway.value,
-    isSpecial: isSpecial.value,
-    notes: notes.value,
-    proteinType: selectedProtein.value
-  }
-
-  if (editingIndex.value !== null) {
-    cart.value[editingIndex.value] = newItem
-  } else {
-    cart.value.push(newItem)
-  }
-  closeModal()
-}
-
-const editCartItem = (index: number) => {
-  const item = cart.value[index]
-  const menu = menus.value.find((m: any) => m.id === item.menuId)
-  if (!menu) return
-  editingIndex.value = index
-  selectedMenu.value = menu
-  Object.keys(optionQuantities).forEach(key => delete optionQuantities[Number(key)])
-  for (const opt of item.selectedOptions) {
-    optionQuantities[opt.optionId] = opt.quantity
-  }
-  dishQuantity.value = item.quantity
-  isTakeaway.value = item.isTakeaway
-  isSpecial.value = item.isSpecial
-  notes.value = item.notes
-  selectedProtein.value = item.proteinType || 'หมู'
-  showCartModal.value = false
-  showModal.value = true
-}
-
-// Cart summary
-const totalItems = computed(() => cart.value.reduce((sum, item) => sum + item.quantity, 0))
-const totalPrice = computed(() => cart.value.reduce((sum, item) => sum + item.totalPrice * item.quantity, 0))
-
-// Get quantity of a menu in cart (for display on cards)
-const getMenuCartCount = (menuId: number) => {
-  return cart.value.filter(item => item.menuId === menuId).length
-}
-
-// Cart modal
-const showCartModal = ref(false)
-
-// Cart item management
-const incrementCartItem = (index: number) => {
-  cart.value[index].quantity++
-}
-
-const decrementCartItem = (index: number) => {
-  if (cart.value[index].quantity > 1) {
-    cart.value[index].quantity--
-  } else {
-    // Remove item if quantity becomes 0
-    removeCartItem(index)
-  }
-}
-
-const removeCartItem = (index: number) => {
-  cart.value.splice(index, 1)
-  if (cart.value.length === 0) {
-    showCartModal.value = false
-  }
-}
-
-const confirmClearCart = ref(false)
 
 const clearCart = () => {
   cart.value = []
-  showCartModal.value = false
-  confirmClearCart.value = false
 }
 
-// Submit order to API
+// Active orders & Editing state
+const activeTab = ref<'cart' | 'active_orders'>('cart')
+const editingOrderId = ref<number | null>(null)
+
+// Fetch active orders (Pending, Cooking, Ready)
+const { data: activeOrdersResult, refresh: refreshActiveOrders } = await useFetch<{ success: boolean, data: any[] }>('/api/orders/orders-by-status?status=Pending,Cooking,Ready')
+const activeOrders = computed(() => activeOrdersResult.value?.data || [])
+
+// Poll active orders every 10 seconds to keep cash register synced with kitchen
+if (import.meta.client) {
+  setInterval(() => {
+    refreshActiveOrders()
+  }, 10000)
+}
+
+const cancelEdit = () => {
+  editingOrderId.value = null
+  cart.value = []
+  tableNumber.value = ''
+}
+
+const formatOrderTime = (dateStr: string) => {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  return date.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
+}
+
+const archiveOrder = async (orderId: number) => {
+  try {
+    const response = await $fetch<{ success: boolean }>(`/api/orders/${orderId}`, {
+      method: 'PATCH',
+      body: { status: 'Completed' }
+    })
+    if (response.success) {
+      await refreshActiveOrders()
+    }
+  } catch (error: any) {
+    console.error('Failed to archive order:', error)
+    alert('เกิดข้อผิดพลาดในการเก็บออร์เดอร์: ' + (error.data?.message || error.message))
+  }
+}
+
+const editOrder = (order: any) => {
+  editingOrderId.value = order.id
+  
+  // Extract table number
+  const match = order.location?.match(/โต๊ะ\s*(.+)/)
+  tableNumber.value = match ? match[1] : ''
+  
+  // Build items list
+  cart.value = order.items.map((item: any) => {
+      const menu = allMenus.value.find((m: any) => m.id === item.menu_id)
+      const categoryId = menu ? menu.category_id : 0
+      
+      let discountVal = Number(item.discount || 0)
+      const discountDefaults: Record<number, number> = {
+          15: 5.00,
+          16: 10.00,
+          17: 20.00,
+          18: 50.00
+      }
+      
+      const filteredOptions: any[] = []
+      ;(item.options || []).forEach((opt: any) => {
+          const optId = Number(opt.option_id)
+          if (discountDefaults[optId] !== undefined) {
+              if (discountVal === 0) {
+                  discountVal = discountDefaults[optId]
+              }
+          } else {
+              let extraPrice = 0
+              for (const m of allMenus.value) {
+                  const o = m.options?.find((x: any) => x.id === opt.option_id)
+                  if (o) {
+                      extraPrice = Number(o.extra_price)
+                      break
+                  }
+              }
+              filteredOptions.push({
+                  optionId: optId,
+                  quantity: Number(opt.quantity || 1),
+                  label: opt.label,
+                  extraPrice
+              })
+          }
+      })
+
+      return {
+          menuId: item.menu_id,
+          menuName: item.menu_name,
+          basePrice: menu ? Number(menu.base_price) : Number(item.item_price),
+          selectedOptions: filteredOptions,
+          totalPrice: Number(item.item_price),
+          quantity: Number(item.quantity),
+          isTakeaway: !!item.is_takeaway,
+          isSpecial: !!item.is_special,
+          notes: item.notes || '',
+          proteinType: item.protein_type || '',
+          categoryId,
+          discount: discountVal
+      }
+  })
+  
+  // Switch to cart tab
+  activeTab.value = 'cart'
+}
+
+const printActiveOrderReceipt = (order: any) => {
+  // Map order items to CartItem format for the receipt
+  const items = order.items.map((item: any) => {
+    const menu = allMenus.value.find((m: any) => m.id === item.menu_id)
+    const categoryId = menu ? menu.category_id : 0
+    
+    let discountVal = Number(item.discount || 0)
+    const discountDefaults: Record<number, number> = {
+        15: 5.00,
+        16: 10.00,
+        17: 20.00,
+        18: 50.00
+    }
+    
+    const filteredOptions: any[] = []
+    ;(item.options || []).forEach((opt: any) => {
+        const optId = Number(opt.option_id)
+        if (discountDefaults[optId] !== undefined) {
+            if (discountVal === 0) {
+                discountVal = discountDefaults[optId]
+            }
+        } else {
+            let extraPrice = 0
+            for (const m of allMenus.value) {
+                const o = m.options?.find((x: any) => x.id === opt.option_id)
+                if (o) {
+                    extraPrice = Number(o.extra_price)
+                    break
+                }
+            }
+            filteredOptions.push({
+                optionId: optId,
+                quantity: Number(opt.quantity || 1),
+                label: opt.label,
+                extraPrice
+            })
+        }
+    })
+
+    return {
+        menuId: item.menu_id,
+        menuName: item.menu_name,
+        basePrice: menu ? Number(menu.base_price) : Number(item.item_price),
+        selectedOptions: filteredOptions,
+        totalPrice: Number(item.item_price),
+        quantity: Number(item.quantity),
+        isTakeaway: !!item.is_takeaway,
+        isSpecial: !!item.is_special,
+        notes: item.notes || '',
+        proteinType: item.protein_type || '',
+        categoryId,
+        discount: discountVal
+    }
+  })
+
+  receiptData.value = {
+    orderId: order.id,
+    date: new Date(order.created_at).toLocaleString('th-TH', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    }),
+    location: order.location || 'จุดขาย POS หน้าร้าน',
+    items,
+    totalPrice: Number(order.total_price)
+  }
+  showReceiptModal.value = true
+}
+
+// 5. Submit Order to API
 const isSubmitting = ref(false)
 const orderSuccess = ref(false)
 const submittedOrderId = ref<number | null>(null)
+const tableNumber = ref('')
+
+// State for receipt printing
+const showReceiptModal = ref(false)
+const receiptData = ref<{
+  orderId: number | null
+  date: string
+  location: string
+  items: CartItem[]
+  totalPrice: number
+} | null>(null)
+
+const printReceipt = () => {
+  if (import.meta.client) {
+    window.print()
+  }
+}
 
 const submitOrder = async () => {
   if (cart.value.length === 0 || isSubmitting.value) return
 
   isSubmitting.value = true
+
   try {
-    const response = await $fetch<{ success: boolean, data: { orderId: number, message: string } }>('/api/orders', {
-      method: 'POST',
+    const url = editingOrderId.value 
+      ? `/api/orders/${editingOrderId.value}`
+      : '/api/orders'
+    const method = editingOrderId.value ? 'PUT' : 'POST'
+
+    const response = await $fetch<{ success: boolean, data: { orderId: number, message: string } }>(url, {
+      method,
       body: {
-        items: cart.value,
-        totalPrice: totalPrice.value,
-        location: null
+        items: sortedCart.value,
+        totalPrice: cartTotalPrice.value,
+        location: tableNumber.value ? `โต๊ะ ${tableNumber.value}` : 'จุดขาย POS หน้าร้าน'
       }
     })
 
     if (response.success) {
-      pushSession(response.data.orderId)
-      await refreshTracker()
-      submittedOrderId.value = response.data.orderId
+      const orderId = response.data.orderId
+      
+      // Store current cart data in receipt state before clearing it
+      receiptData.value = {
+        orderId,
+        date: new Date().toLocaleString('th-TH', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        }),
+        location: tableNumber.value ? `โต๊ะ ${tableNumber.value}` : 'จุดขาย POS หน้าร้าน',
+        items: [...sortedCart.value],
+        totalPrice: cartTotalPrice.value
+      }
+
+      submittedOrderId.value = orderId
       orderSuccess.value = true
+      showReceiptModal.value = true
+      
+      // Clear cart
       cart.value = []
-      showCartModal.value = false
+      tableNumber.value = ''
+      editingOrderId.value = null
+      
+      // Refresh active orders list
+      await refreshActiveOrders()
 
       setTimeout(() => {
         orderSuccess.value = false
@@ -284,809 +799,892 @@ const submitOrder = async () => {
     isSubmitting.value = false
   }
 }
-
-// ─── Session Order Tracker ─────────────────────────────────────────────
-const SESSION_KEY = 'food-order:my-orders'
-const SESSION_MAX_AGE = 6 * 60 * 60 * 1000
-
-interface SessionEntry { id: number; ts: number }
-
-const mySessionIds = ref<number[]>([])
-
-function loadSession(): number[] {
-  if (!import.meta.client) return []
-  try {
-    const raw = localStorage.getItem(SESSION_KEY)
-    if (!raw) return []
-    const arr: SessionEntry[] = JSON.parse(raw)
-    const cut = Date.now() - SESSION_MAX_AGE
-    const valid = arr.filter(e => e.ts > cut)
-    localStorage.setItem(SESSION_KEY, JSON.stringify(valid))
-    return valid.map(e => e.id)
-  } catch { return [] }
-}
-
-function pushSession(id: number) {
-  if (!import.meta.client) return
-  try {
-    const raw = localStorage.getItem(SESSION_KEY)
-    const arr: SessionEntry[] = raw ? JSON.parse(raw) : []
-    const cut = Date.now() - SESSION_MAX_AGE
-    const valid = arr.filter(e => e.ts > cut && e.id !== id)
-    valid.push({ id, ts: Date.now() })
-    localStorage.setItem(SESSION_KEY, JSON.stringify(valid))
-    mySessionIds.value = valid.map(e => e.id)
-  } catch {}
-}
-
-const { data: trackerResult, refresh: refreshTracker } = await useFetch('/api/orders/by-ids', {
-  query: computed(() => ({ ids: mySessionIds.value.join(',') })),
-  server: false,
-  lazy: true,
-  watch: false
-})
-
-const trackedOrders = computed(() => (trackerResult.value?.data || []) as any[])
-const showTrackerDrawer = ref(false)
-
-let trackerPoll: ReturnType<typeof setTimeout> | null = null
-
-async function pollTracker() {
-  if (mySessionIds.value.length > 0) {
-    try { await refreshTracker() } catch {}
-  }
-  trackerPoll = setTimeout(pollTracker, 5000)
-}
-
-function getStatusLabel(status: string) {
-  const m: Record<string, string> = {
-    Pending: '⏳ รอรับออเดอร์', Cooking: '🍳 กำลังทำ',
-    Ready: '✅ พร้อมเสิร์ฟ', Completed: '🎉 เสร็จ', Cancelled: '❌ ยกเลิก'
-  }
-  return m[status] || status
-}
-
-function getStatusColor(status: string) {
-  const m: Record<string, string> = {
-    Pending: 'bg-yellow-100 text-yellow-800',
-    Cooking: 'bg-orange-100 text-orange-800',
-    Ready: 'bg-green-100 text-green-800',
-    Completed: 'bg-gray-100 text-gray-500',
-    Cancelled: 'bg-red-100 text-red-500'
-  }
-  return m[status] || 'bg-gray-100 text-gray-500'
-}
-
-// Modal compact-height toggle (localStorage persisted)
-const modalCompact = ref(false)
-
-function toggleModalCompact() {
-  modalCompact.value = !modalCompact.value
-  if (import.meta.client) {
-    localStorage.setItem('order:modal-compact', String(modalCompact.value))
-  }
-}
-
-// View mode density toggle
-const viewMode = ref<'normal' | 'compact'>('normal')
-
-function setViewMode(mode: 'normal' | 'compact') {
-  viewMode.value = mode
-  localStorage.setItem('order:view-mode', mode)
-}
-
-// Tracker panel open/close
-const trackerOpen = ref(true)
-
-function toggleTracker() {
-  trackerOpen.value = !trackerOpen.value
-  localStorage.setItem('order:tracker-open', String(trackerOpen.value))
-}
-
-// Filter out completed/cancelled from display
-const visibleTrackedOrders = computed(() =>
-  trackedOrders.value.filter((o: any) => !['Completed', 'Cancelled'].includes(o.status))
-)
-
-// Edit submitted order item (Pending only)
-const editingOrderItem = ref<{ itemId: number; orderId: number } | null>(null)
-
-function openTrackerItemEdit(item: any, order: any) {
-  if (order.status !== 'Pending') return
-  const menu = menus.value.find((m: any) => m.id === item.menu_id)
-  if (!menu) return
-  editingOrderItem.value = { itemId: item.id, orderId: order.id }
-  selectedMenu.value = menu
-  Object.keys(optionQuantities).forEach(key => delete optionQuantities[Number(key)])
-  for (const opt of item.options || []) {
-    optionQuantities[opt.option_id] = opt.quantity
-  }
-  dishQuantity.value = item.quantity
-  isTakeaway.value = item.is_takeaway
-  isSpecial.value = item.is_special
-  notes.value = item.notes || ''
-  selectedProtein.value = item.protein_type || 'หมู'
-  editingIndex.value = null
-  showTrackerDrawer.value = false
-  showModal.value = true
-}
-
-onMounted(() => {
-  mySessionIds.value = loadSession()
-  pollTracker()
-  const savedMode = localStorage.getItem('order:view-mode')
-  if (savedMode === 'compact') viewMode.value = 'compact'
-  const savedOpen = localStorage.getItem('order:tracker-open')
-  if (savedOpen !== null) trackerOpen.value = savedOpen !== 'false'
-  const savedModalCompact = localStorage.getItem('order:modal-compact')
-  if (savedModalCompact === 'true') modalCompact.value = true
-})
-
-onUnmounted(() => {
-  if (trackerPoll) clearTimeout(trackerPoll)
-})
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50">
-    <!-- Success Toast -->
-    <Transition name="slide-up">
-      <div 
-        v-if="orderSuccess"
-        class="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-green-500 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3"
-      >
-        <span class="text-2xl">✅</span>
-        <div>
-          <p class="font-bold">สั่งอาหารสำเร็จ!</p>
-          <p class="text-sm text-green-100">Order #{{ submittedOrderId }}</p>
-        </div>
-        <button @click="orderSuccess = false" class="ml-2 text-green-200 hover:text-white">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-          </svg>
-        </button>
+  <div class="h-screen flex flex-col bg-slate-900 text-slate-100 overflow-hidden font-sans">
+    
+    <!-- Top Header bar -->
+    <header class="bg-slate-800 border-b border-slate-700 px-6 py-4 flex items-center justify-between flex-shrink-0">
+      <div class="flex items-center gap-3">
+        <NuxtLink to="/" class="text-xl hover:opacity-80 transition-opacity">🏠</NuxtLink>
+        <h1 class="text-2xl font-black tracking-tight text-white flex items-center gap-2">
+          🍜 ระบบสั่งอาหาร & คาเฟ่ <span class="text-xs font-bold px-2 py-0.5 bg-orange-500 rounded text-white uppercase">POS Counter</span>
+        </h1>
       </div>
-    </Transition>
-    <!-- Header -->
-    <header class="sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        <NuxtLink to="/" class="flex items-center gap-2 text-gray-600 hover:text-orange-600 transition-colors group">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transform group-hover:-translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-          </svg>
-        </NuxtLink>
-        
-        <div class="flex items-center gap-2">
-          <span class="text-2xl">🍜</span>
-          <h1 class="text-xl font-black bg-clip-text text-transparent bg-gradient-to-r from-orange-500 to-red-500">
-            Menu
-          </h1>
-        </div>
+      
+      <!-- Search & Category Filters -->
+      <div class="flex items-center gap-3 w-[60%] justify-end font-sans">
+        <!-- Toggle Image Layout Button -->
+        <button 
+          @click="toggleShowImages"
+          class="bg-slate-700 hover:bg-slate-650 text-slate-200 px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-slate-600 active:scale-95"
+        >
+          <span>{{ showImages ? '🖼️ มีรูป' : '🚫🖼️ ไม่มีรูป' }}</span>
+        </button>
 
-        <div class="flex items-center gap-2">
-          <!-- Density toggle -->
-          <div class="flex bg-gray-100 rounded-xl p-0.5 gap-0.5">
-            <button @click="setViewMode('normal')" class="px-2 py-1.5 rounded-lg text-sm transition-colors" :class="viewMode === 'normal' ? 'bg-white shadow-sm text-gray-700' : 'text-gray-400'" title="ปกติ">🔲</button>
-            <button @click="setViewMode('compact')" class="px-2 py-1.5 rounded-lg text-sm transition-colors" :class="viewMode === 'compact' ? 'bg-white shadow-sm text-gray-700' : 'text-gray-400'" title="กระชับ">▦</button>
-          </div>
-          <!-- Kitchen Panel Link -->
-          <NuxtLink
-            to="/kitchen"
-            class="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-xl font-medium transition-all shadow-lg hover:shadow-xl"
-          >
-            <span class="text-xl">👨‍🍳</span>
-            <span class="hidden sm:inline">ครัว</span>
-          </NuxtLink>
-        </div>
+        <input 
+          v-model="search"
+          type="text" 
+          placeholder="🔎 ค้นหาเมนู..." 
+          class="bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm text-white w-48 focus:w-64 focus:outline-none focus:ring-1 focus:ring-orange-500 transition-all"
+        />
+        
+        <NuxtLink to="/admin/items" class="bg-slate-700 hover:bg-slate-600 text-slate-200 px-4 py-2 rounded-xl text-sm font-medium transition-colors">
+          ⚙️ หลังบ้าน
+        </NuxtLink>
       </div>
     </header>
 
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-40">
-      <div :class="trackerOpen ? 'lg:grid lg:grid-cols-[1fr_300px] lg:gap-6 lg:items-start' : ''">
-      <div><!-- left column -->
-
-      <!-- Menu Grid -->
-      <div :class="viewMode === 'compact'
-        ? 'grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3'
-        : 'grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6'">
-        <div
-          v-for="menu in menus"
-          :key="menu.id"
-          @click="openOptionsModal(menu)"
-          class="relative bg-white rounded-3xl shadow-sm overflow-hidden flex flex-col cursor-pointer active:scale-[0.97] transition-transform"
-          :class="{ 'ring-2 ring-orange-400 ring-offset-2': getMenuCartCount(menu.id) > 0 }"
-        >
-          <!-- Image Container -->
-          <div
-            class="relative overflow-hidden bg-gray-100"
-            :class="viewMode === 'compact' ? 'aspect-[4/3]' : 'aspect-square'"
+    <!-- Main Grid -->
+    <div class="flex-1 flex portrait:flex-col overflow-hidden">
+      
+      <!-- LEFT SIDEBAR / GRID: 65% width (100% in portrait) -->
+      <main class="w-[65%] portrait:w-full portrait:h-[60%] flex flex-col border-r portrait:border-r-0 portrait:border-b border-slate-800 bg-slate-950 overflow-hidden">
+        
+        <!-- Category Selection Tabs (Large touch targets) -->
+        <div class="flex p-3 gap-2 bg-slate-900/60 border-b border-slate-800 overflow-x-auto flex-shrink-0">
+          <button 
+            @click="activeCategory = 'all'"
+            :class="`px-5 py-3 rounded-xl font-bold transition-all text-base ${
+              activeCategory === 'all' 
+                ? 'bg-orange-600 text-white shadow-lg shadow-orange-950/30' 
+                : 'bg-slate-800 text-slate-300 hover:bg-slate-750'
+            }`"
           >
-            <img
-              :src="menu.image_url"
-              :alt="menu.name"
-              class="w-full h-full object-cover"
-              loading="lazy"
-              decoding="async"
-            >
-
-            <div class="absolute bottom-2 left-2">
-              <span
-                class="text-white drop-shadow-lg bg-black/40 rounded-md"
-                :class="viewMode === 'compact' ? 'font-bold text-xs px-1.5 py-0.5' : 'font-black text-xl px-2 py-1'"
-              >฿{{ menu.base_price }}</span>
-            </div>
-
-            <!-- Cart Count Badge -->
-            <div
-              v-if="getMenuCartCount(menu.id) > 0"
-              class="absolute bg-orange-500 text-white rounded-full flex items-center justify-center font-bold shadow-lg"
-              :class="viewMode === 'compact' ? 'top-1 right-1 w-5 h-5 text-xs' : 'top-3 right-3 w-10 h-10 text-lg'"
-            >
-              {{ getMenuCartCount(menu.id) }}
-            </div>
-          </div>
-
-          <!-- Content -->
-          <div class="flex-grow" :class="viewMode === 'compact' ? 'p-2 pb-8' : 'p-3 sm:p-4 pb-10'">
-            <h3
-              class="font-bold text-gray-800 leading-tight line-clamp-2"
-              :class="viewMode === 'compact' ? 'text-xs' : 'text-sm sm:text-base'"
-            >{{ menu.name }}</h3>
-          </div>
-
-          <!-- Add button: absolute bottom-right — adds directly with defaults -->
-          <button
-            @click.stop="addDirectToCart(menu)"
-            class="absolute bottom-2 right-2 bg-gradient-to-r from-orange-400 to-red-500 text-white shadow-md rounded-xl flex items-center justify-center"
-            :class="viewMode === 'compact' ? 'w-9 h-9' : 'w-11 h-11'"
+            📂 ทั้งหมด
+          </button>
+          
+          <button 
+            v-for="cat in categories" 
+            :key="cat.id"
+            @click="activeCategory = cat.id"
+            :class="`px-5 py-3 rounded-xl font-bold transition-all text-base flex items-center gap-1.5 ${
+              activeCategory === cat.id 
+                ? 'bg-orange-600 text-white shadow-lg shadow-orange-950/30' 
+                : 'bg-slate-800 text-slate-300 hover:bg-slate-750'
+            }`"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" :class="viewMode === 'compact' ? 'h-4 w-4' : 'h-6 w-6'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
-            </svg>
+            <span>{{ cat.icon }}</span>
+            <span>{{ cat.name === 'Food' ? 'อาหาร' : cat.name === 'Beverage' ? 'เครื่องดื่ม' : cat.name === 'Dessert' ? 'ของหวาน' : cat.name }}</span>
           </button>
         </div>
-      </div>
-      
-      <!-- Empty State -->
-      <div v-if="!menus || menus.length === 0" class="flex flex-col items-center justify-center py-24 text-center">
-        <div class="w-32 h-32 bg-gray-100 rounded-full flex items-center justify-center mb-8">
-          <span class="text-6xl">🍽️</span>
-        </div>
-        <h3 class="text-2xl font-bold text-gray-800 mb-3">ยังไม่มีเมนูอาหาร</h3>
-        <p class="text-gray-500 max-w-sm">กรุณาเพิ่มเมนูในหน้าผู้ดูแลระบบก่อน</p>
-      </div>
-      </div><!-- /left column -->
 
-      <!-- Right: Order Tracker Panel (lg+ only) -->
-      <aside v-show="trackerOpen" class="hidden lg:block sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto">
-        <div class="bg-white rounded-3xl shadow-sm overflow-hidden">
-          <div class="p-3 border-b border-gray-100 flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <h2 class="font-bold text-gray-800 text-sm">📋 ออเดอร์ของฉัน</h2>
-              <span v-if="visibleTrackedOrders.length" class="w-5 h-5 bg-orange-500 text-white rounded-full text-xs flex items-center justify-center font-bold">{{ visibleTrackedOrders.length }}</span>
-            </div>
-            <button @click="toggleTracker" class="w-7 h-7 bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center justify-center text-gray-500 transition-colors" title="ปิดแถบ">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        <!-- Beverage Temperature Sub-Tabs (Shown only when Beverage category is selected) -->
+        <div v-if="activeCategory === beverageCategoryId" class="flex px-4 py-2 gap-2 bg-slate-900/40 border-b border-slate-800 flex-shrink-0 animate-fade-in">
+          <button 
+            @click="beverageTempFilter = 'cold'"
+            :class="`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              beverageTempFilter === 'cold' 
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/30' 
+                : 'bg-slate-800 text-slate-400 hover:bg-slate-750'
+            }`"
+          >
+            🧊 เมนูเย็น (Cold)
+          </button>
+          <button 
+            @click="beverageTempFilter = 'hot'"
+            :class="`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              beverageTempFilter === 'hot' 
+                ? 'bg-orange-600 text-white shadow-lg shadow-orange-900/30' 
+                : 'bg-slate-800 text-slate-400 hover:bg-slate-750'
+            }`"
+          >
+            ☕ เมนูร้อน (Hot)
+          </button>
+          <button 
+            @click="beverageTempFilter = 'all'"
+            :class="`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              beverageTempFilter === 'all' 
+                ? 'bg-slate-750 text-slate-200 border border-slate-650' 
+                : 'bg-slate-800 text-slate-400'
+            }`"
+          >
+            📂 ทั้งหมด
+          </button>
+        </div>
+
+        <!-- Menu Cards Grid (Scrollable) -->
+        <div class="flex-1 p-4 overflow-y-auto min-h-0">
+          <div v-if="menusPending" class="flex flex-col items-center justify-center py-24">
+            <span class="text-4xl animate-spin mb-4">⏳</span>
+            <p class="text-slate-400">กำลังโหลดรายการเมนู...</p>
+          </div>
+          
+          <div v-else-if="filteredMenus.length === 0" class="text-center py-24">
+            <span class="text-5xl mb-4 block">🔍</span>
+            <p class="text-slate-400 text-lg font-medium">ไม่พบเมนูที่ตรงกับเงื่อนไข</p>
+          </div>
+          
+          <div v-else class="grid gap-3.5" :class="showImages ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'">
+            <!-- Menus List -->
+            <button 
+              v-for="menu in filteredMenus" 
+              :key="menu.clientUniqueId"
+              @click="selectMenu(menu)"
+              :class="`rounded-2xl border text-left flex active:scale-98 transition-all duration-100 ${
+                showImages ? 'flex-col overflow-hidden h-auto' : 'p-4 flex-col justify-between h-32'
+              } ${
+                selectedMenu?.clientUniqueId === menu.clientUniqueId
+                  ? 'border-orange-500 ring-2 ring-orange-500 bg-orange-950/30'
+                  : 'border-slate-800 bg-slate-900 hover:bg-slate-850'
+              }`"
+            >
+              <!-- Card Image (Shown ONLY if showImages is true) -->
+              <template v-if="showImages">
+                <div class="h-28 w-full bg-slate-850 relative overflow-hidden">
+                  <img 
+                    v-if="menu.image_url" 
+                    :src="menu.image_url" 
+                    :alt="menu.name" 
+                    class="w-full h-full object-cover"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                  <div v-else class="w-full h-full flex items-center justify-center text-4xl">
+                    {{ menu.dept === 'Kitchen' ? '🍜' : menu.dept === 'Barista' ? '☕' : '🍰' }}
+                  </div>
+                  
+                  <!-- Department badge overlay -->
+                  <span :class="`absolute top-2 right-2 text-[10px] uppercase font-black px-2 py-0.5 rounded shadow ${
+                    menu.dept === 'Kitchen' ? 'bg-orange-600 text-white' :
+                    menu.dept === 'Barista' ? 'bg-blue-600 text-white' :
+                    'bg-pink-600 text-white'
+                  }`">
+                    {{ menu.dept === 'Kitchen' ? 'อาหาร' : menu.dept === 'Barista' ? 'บาร์น้ำ' : 'ขนม' }}
+                  </span>
+                </div>
+                
+                <!-- Card details -->
+                <div class="p-3 flex-1 flex flex-col justify-between">
+                  <h3 class="font-bold text-white text-sm md:text-base leading-snug line-clamp-2">{{ menu.name }}</h3>
+                  <span class="text-orange-400 font-extrabold text-base mt-1 block">฿{{ menu.base_price }}</span>
+                </div>
+              </template>
+
+              <!-- Text/Emoji Card layout (Shown when showImages is false) -->
+              <template v-else>
+                <div class="flex justify-between items-start w-full">
+                  <span class="text-2xl">{{ menu.dept === 'Kitchen' ? '🍜' : menu.dept === 'Barista' ? '☕' : '🍰' }}</span>
+                  <span :class="`text-[10px] uppercase font-black px-2 py-0.5 rounded ${
+                    menu.dept === 'Kitchen' ? 'bg-orange-950 text-orange-200' :
+                    menu.dept === 'Barista' ? 'bg-blue-950 text-blue-200' :
+                    'bg-pink-950 text-pink-200'
+                  }`">
+                    {{ menu.dept === 'Kitchen' ? 'ครัว' : menu.dept === 'Barista' ? 'บาร์น้ำ' : 'ขนม' }}
+                  </span>
+                </div>
+                
+                <div>
+                  <h3 class="font-bold text-white text-sm md:text-base leading-snug line-clamp-2 font-sans">{{ menu.name }}</h3>
+                  <span class="text-orange-400 font-extrabold text-lg mt-1 block">฿{{ menu.base_price }}</span>
+                </div>
+              </template>
+            </button>
+          </div>
+        </div>
+      </main>
+
+      <!-- RIGHT PANEL: 35% width (100% in portrait) -->
+      <aside class="w-[35%] portrait:w-full portrait:h-[40%] bg-slate-900 flex flex-col overflow-hidden min-h-0">
+        
+        <!-- SECTION 1: Modifier / Options Editor (Full height of the sidebar in landscape, full screen overlay in portrait) -->
+        <div 
+          v-if="selectedMenu"
+          class="modifier-panel h-full flex flex-col overflow-hidden min-h-0 portrait:fixed portrait:inset-0 portrait:z-50 portrait:w-full portrait:h-full portrait:max-h-screen portrait:bg-slate-900 animate-fade-in"
+        >
+          <div class="bg-slate-850 px-4 py-4 flex items-center justify-between border-b border-slate-800 flex-shrink-0">
+            <h2 class="text-base font-black tracking-wider text-white uppercase flex items-center gap-1.5 font-sans">
+              <span>{{ editingCartItem ? '✏️ แก้ไขรายการในตะกร้า' : '⚙️ ปรับแต่งเครื่องดื่ม/อาหาร' }}</span>
+            </h2>
+            <button 
+              @click="selectedMenu = null" 
+              class="text-sm font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-750 px-3.5 py-1.5 rounded-xl active:scale-95 transition-all border border-slate-700"
+            >
+              ✕ ยกเลิก (Cancel)
             </button>
           </div>
 
-          <div v-if="visibleTrackedOrders.length === 0" class="p-6 text-center text-gray-400">
-            <p class="text-sm mb-1">ยังไม่มีออเดอร์</p>
-            <p class="text-xs">สั่งอาหารแล้วจะแสดงที่นี่</p>
+          <!-- Loading state for options -->
+          <div v-if="activeOptionsPending" class="flex-1 flex flex-col items-center justify-center py-12">
+            <span class="text-2xl animate-spin mb-2">⏳</span>
+            <p class="text-xs text-slate-400">กำลังโหลดตัวเลือกสำหรับ {{ selectedMenu.name }}...</p>
           </div>
 
-          <div v-else class="divide-y divide-gray-50">
-            <div v-for="order in visibleTrackedOrders" :key="order.id" class="p-3">
-              <div class="flex items-center justify-between mb-2">
-                <span class="text-xs text-gray-400 font-medium">#{{ order.id }}</span>
-                <span class="text-xs px-2 py-0.5 rounded-full font-medium" :class="getStatusColor(order.status)">
-                  {{ getStatusLabel(order.status) }}
-                </span>
+          <!-- Options Editor Container (Scrollable) -->
+          <div v-else class="flex-1 overflow-y-auto p-4 space-y-4">
+            
+            <!-- Item Header -->
+            <div class="bg-slate-800/80 p-3.5 rounded-xl border border-slate-700/60 flex items-center gap-3">
+              <div class="w-12 h-12 rounded-lg bg-slate-950 overflow-hidden flex-shrink-0">
+                <img v-if="selectedMenu.image_url" :src="selectedMenu.image_url" class="w-full h-full object-cover">
+                <div v-else class="w-full h-full flex items-center justify-center text-xl">☕</div>
               </div>
-              <div class="space-y-1">
-                <div v-for="item in order.items" :key="item.id" class="flex items-center gap-1.5 text-xs text-gray-700">
-                  <span class="font-medium flex-1 truncate">{{ item.menu_name }}</span>
-                  <span class="text-gray-400 flex-shrink-0">x{{ item.quantity }}</span>
-                  <span v-if="item.protein_type && item.protein_type !== 'หมู'" class="text-amber-600 flex-shrink-0">({{ item.protein_type }})</span>
-                  <!-- Edit button (Pending only) -->
-                  <button
-                    v-if="order.status === 'Pending'"
-                    @click="openTrackerItemEdit(item, order)"
-                    class="w-5 h-5 bg-blue-100 hover:bg-blue-200 text-blue-600 rounded flex items-center justify-center flex-shrink-0 transition-colors"
-                    title="แก้ไข"
+              <div class="flex-1">
+                <h3 class="font-black text-white text-lg leading-tight">{{ selectedMenu.name }}</h3>
+                <span class="text-xs text-slate-400">ราคาเริ่มต้น ฿{{ selectedMenu.base_price }}</span>
+              </div>
+            </div>
+
+            <!-- Standard Food Modifiers: Protein & Special (Show ONLY for Food Kitchen items) -->
+            <div v-if="selectedMenu.dept === 'Kitchen'" class="space-y-4">
+              <!-- Protein Selection -->
+              <div>
+                <p class="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">🥩 เลือกเนื้อสัตว์ (Protein)</p>
+                <div class="grid grid-cols-3 gap-2">
+                  <button 
+                    v-for="p in proteins" 
+                    :key="p"
+                    @click="selectedProtein = p"
+                    :class="`py-2 rounded-xl text-sm font-semibold border transition-all ${
+                      selectedProtein === p 
+                        ? 'border-orange-500 bg-orange-950/40 text-orange-400' 
+                        : 'border-slate-800 bg-slate-950 text-slate-400 hover:bg-slate-850'
+                    }`"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                    {{ p }}
                   </button>
                 </div>
               </div>
-              <p class="text-xs text-gray-400 mt-1.5">฿{{ Number(order.total_price).toLocaleString() }}</p>
+
+              <!-- Special Checkbox -->
+              <div class="flex gap-2">
+                <button 
+                  @click="isSpecial = !isSpecial"
+                  :class="`flex-1 py-3 px-4 rounded-xl border text-sm font-bold flex items-center justify-between transition-all ${
+                    isSpecial 
+                      ? 'border-orange-500 bg-orange-950/40 text-orange-400' 
+                      : 'border-slate-800 bg-slate-950 text-slate-400'
+                  }`"
+                >
+                  <span>⭐ จานพิเศษ (Special)</span>
+                  <span class="text-xs px-2 py-0.5 bg-orange-600 text-white rounded-full">+฿10</span>
+                </button>
+              </div>
             </div>
+
+            <!-- Custom Beverage Option Groups (Show if beverage/dessert has linked options) -->
+            <div v-if="activeItemOptions.length > 0" class="space-y-4">
+              <div v-for="(opts, group) in groupedActiveOptions" :key="group" class="space-y-2">
+                <p class="text-xs font-bold text-slate-400 uppercase tracking-wide font-sans">
+                  {{ groupNameThai(group) }}
+                </p>
+
+                <!-- Temperature, Sweetness, Milk options: Single selection (Radio buttons) -->
+                <div v-if="['temperature', 'sweetness', 'milk_type', 'discount'].includes(group)" class="grid grid-cols-3 gap-2">
+                  <button 
+                    v-for="opt in opts" 
+                    :key="opt.id"
+                    @click="selectedSingleOptionsState[group] = opt.id"
+                    :class="`py-2.5 px-2 rounded-xl border text-center flex flex-col justify-center transition-all ${
+                      selectedSingleOptionsState[group] === opt.id 
+                        ? 'border-orange-500 bg-orange-950/40 text-orange-400' 
+                        : 'border-slate-800 bg-slate-950 text-slate-400 hover:bg-slate-850'
+                    }`"
+                  >
+                    <span class="text-sm font-bold leading-tight">{{ opt.label }}</span>
+                    <span v-if="Number(opt.extra_price) > 0" class="text-[10px] text-orange-400 font-extrabold mt-0.5">+฿{{ opt.extra_price }}</span>
+                    <span v-else-if="Number(opt.extra_price) < 0" class="text-[10px] text-emerald-400 font-extrabold mt-0.5">-฿{{ Math.abs(Number(opt.extra_price)) }}</span>
+                  </button>
+                </div>
+
+                <!-- Addons options: Multi selection (Checkboxes) -->
+                <div v-else class="grid grid-cols-2 gap-2">
+                  <button 
+                    v-for="opt in opts" 
+                    :key="opt.id"
+                    @click="selectedOptionsState[opt.id] = !selectedOptionsState[opt.id]"
+                    :class="`py-2.5 px-3 rounded-xl border text-left flex items-center justify-between transition-all ${
+                      selectedOptionsState[opt.id] 
+                        ? 'border-orange-500 bg-orange-950/40 text-orange-400 font-bold' 
+                        : 'border-slate-800 bg-slate-950 text-slate-400 hover:bg-slate-850'
+                    }`"
+                  >
+                    <span class="text-sm">{{ opt.label }}</span>
+                    <span class="text-xs text-orange-400 font-extrabold">
+                      {{ Number(opt.extra_price) > 0 ? `+฿${opt.extra_price}` : 'ฟรี' }}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Notes & Quick presets -->
+            <div class="space-y-2">
+              <p class="text-xs font-bold text-slate-400 uppercase tracking-wide font-sans">📝 หมายเหตุ ( Notes )</p>
+              <input 
+                v-model="notes"
+                type="text" 
+                placeholder="ระบุเพิ่มเติม เช่น ขมน้อย, หวานธรรมชาติ..."
+                class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+              />
+              <div class="flex flex-wrap gap-1 font-sans">
+                <button 
+                  v-for="qn in quickNotes" 
+                  :key="qn"
+                  type="button"
+                  @click="addQuickNote(qn)"
+                  class="bg-slate-950 text-slate-400 px-2 py-1 rounded border border-slate-800 hover:bg-slate-850 text-xs transition-colors"
+                >
+                  + {{ qn }}
+                </button>
+              </div>
+            </div>
+
+            <!-- Discount Section (Built-in POS feature, applies to all menus) -->
+            <div class="space-y-2 border-t border-slate-800/80 pt-4 font-sans">
+              <p class="text-xs font-bold text-slate-400 uppercase tracking-wide flex items-center justify-between">
+                <span>💸 ส่วนลดราคา (Discount)</span>
+                <span v-if="discountAmount > 0" class="text-emerald-400 font-black">-฿{{ discountAmount }}</span>
+              </p>
+              
+              <div class="grid grid-cols-3 gap-2">
+                <button
+                  v-for="preset in [0, 10, 20]"
+                  :key="preset"
+                  type="button"
+                  @click="selectDiscountPreset(preset)"
+                  :class="`py-2.5 rounded-xl border text-center transition-all ${
+                    !isCustomDiscount && discountAmount === preset
+                      ? 'border-emerald-500 bg-emerald-950/40 text-emerald-400 font-bold'
+                      : 'border-slate-800 bg-slate-950 text-slate-400 hover:bg-slate-850'
+                  }`"
+                >
+                  <span class="text-sm font-bold">{{ preset === 0 ? 'ไม่มี' : `${preset} ฿` }}</span>
+                </button>
+              </div>
+
+              <!-- Custom discount option -->
+              <div class="flex items-center gap-2 mt-2">
+                <button
+                  type="button"
+                  @click="enableCustomDiscount"
+                  :class="`py-2.5 px-3 rounded-xl border text-center transition-all flex-shrink-0 text-sm font-bold ${
+                    isCustomDiscount
+                      ? 'border-emerald-500 bg-emerald-950/40 text-emerald-400'
+                      : 'border-slate-800 bg-slate-950 text-slate-400 hover:bg-slate-850'
+                  }`"
+                >
+                  กำหนดเอง
+                </button>
+                <div class="relative flex-1">
+                  <input
+                    v-model.number="customDiscountInput"
+                    type="number"
+                    min="0"
+                    placeholder="ระบุส่วนลดเอง..."
+                    :disabled="!isCustomDiscount"
+                    @input="handleCustomDiscountInput"
+                    class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                  <span class="absolute right-3 top-2.5 text-xs text-slate-500 font-bold">บาท (฿)</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Quantity & Add to Bill Box -->
+            <div class="pt-4 border-t border-slate-800 flex items-center justify-between gap-3">
+              <!-- Stepper -->
+              <div class="flex items-center bg-slate-950 rounded-xl border border-slate-800 p-1">
+                <button 
+                  @click="activeQuantity > 1 && activeQuantity--" 
+                  class="w-10 h-10 rounded-lg bg-slate-800 hover:bg-slate-750 text-white font-extrabold text-lg flex items-center justify-center transition-colors"
+                >
+                  －
+                </button>
+                <span class="px-5 text-lg font-black text-white">{{ activeQuantity }}</span>
+                <button 
+                  @click="activeQuantity++" 
+                  class="w-10 h-10 rounded-lg bg-slate-800 hover:bg-slate-750 text-white font-extrabold text-lg flex items-center justify-center transition-colors"
+                >
+                  ＋
+                </button>
+              </div>
+              
+              <!-- Add button -->
+              <button 
+                @click="addActiveToCart"
+                :class="`flex-1 text-white font-black py-3 px-4 rounded-xl flex items-center justify-between shadow-lg transition-colors ${
+                  editingCartItem
+                    ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-950/30'
+                    : 'bg-orange-600 hover:bg-orange-500 shadow-orange-950/30'
+                }`"
+              >
+                <span>{{ editingCartItem ? '💾 บันทึกการแก้ไข' : '➕ ใส่บิลนี้' }}</span>
+                <span class="text-orange-100 font-extrabold">฿{{ activeItemTotalPrice }}</span>
+              </button>
+            </div>
+            
           </div>
         </div>
+
+        <!-- SECTION 2: Receipt / Cart Billing Panel (Full space when no menu is selected) -->
+        <div 
+          v-if="!selectedMenu"
+          class="flex flex-col overflow-hidden min-h-0 bg-slate-900 h-full"
+        >
+          
+          <!-- Tabs Header -->
+          <div class="bg-slate-850 border-b border-slate-800 flex flex-shrink-0">
+            <button 
+              @click="activeTab = 'cart'"
+              :class="`flex-1 py-3 px-4 text-xs font-extrabold tracking-wider uppercase border-b-2 transition-all flex items-center justify-center gap-2 ${
+                activeTab === 'cart' 
+                  ? 'border-orange-500 text-orange-400 bg-slate-900/40' 
+                  : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+              }`"
+            >
+              <span>🛒 ตะกร้าสินค้า</span>
+              <span v-if="cart.length > 0" class="px-1.5 py-0.5 text-[10px] bg-orange-600 text-white rounded-full">
+                {{ cartTotalItems }}
+              </span>
+            </button>
+            <button 
+              @click="activeTab = 'active_orders'"
+              :class="`flex-1 py-3 px-4 text-xs font-extrabold tracking-wider uppercase border-b-2 transition-all flex items-center justify-center gap-2 ${
+                activeTab === 'active_orders' 
+                  ? 'border-orange-500 text-orange-400 bg-slate-900/40' 
+                  : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+              }`"
+            >
+              <span>⏳ ออเดอร์ค้าง ({{ activeOrders.length }})</span>
+            </button>
+          </div>
+
+          <!-- Tab Content: Cart -->
+          <div v-if="activeTab === 'cart'" class="flex-1 flex flex-col min-h-0 overflow-hidden">
+            <!-- Editing Banner -->
+            <div v-if="editingOrderId" class="bg-amber-950/80 border-b border-amber-900 text-amber-300 px-4 py-2 text-xs flex items-center justify-between font-sans flex-shrink-0">
+              <span>⚠️ กำลังแก้ไขออเดอร์ <b>#{{ editingOrderId }}</b></span>
+              <button 
+                @click="cancelEdit" 
+                class="bg-amber-900/80 hover:bg-amber-850 px-2.5 py-1 rounded text-white font-bold transition-colors text-[10px]"
+              >
+                ยกเลิกแก้ไข
+              </button>
+            </div>
+
+            <!-- Empty Cart state -->
+            <div v-if="cart.length === 0" class="flex-1 flex flex-col items-center justify-center text-center p-6 bg-slate-950/20">
+              <p v-if="orderSuccess" class="text-emerald-400 font-bold mb-1">🎉 บันทึกออร์เดอร์ #{{ submittedOrderId }} สำเร็จ!</p>
+              <p v-if="orderSuccess" class="text-xs text-slate-400">บิลส่งตรงไปครัวเรียบร้อย</p>
+              <div v-else>
+                <span class="text-3xl block mb-2 opacity-50">🛒</span>
+                <p class="text-slate-500 text-sm font-medium">ยังไม่มีรายการชงหรือทำอาหารในบิลนี้</p>
+              </div>
+            </div>
+
+            <!-- Cart Items List (Scrollable, Grouped by Category) -->
+            <div v-else class="flex-1 overflow-y-auto p-3 space-y-4 min-h-0">
+              <div v-for="group in groupedCart" :key="group.category.id || 'unknown'" class="space-y-1.5">
+                <!-- Category Header Tag -->
+                <div class="text-[11px] uppercase tracking-wider font-extrabold text-orange-400 px-1.5 py-0.5 bg-slate-950/40 rounded flex items-center gap-1 font-sans">
+                  <span>{{ group.category.icon }}</span>
+                  <span>{{ group.category.name === 'Food' ? 'อาหาร' : group.category.name === 'Beverage' ? 'เครื่องดื่ม' : group.category.name === 'Dessert' ? 'ของหวาน' : group.category.name }}</span>
+                </div>
+                
+                <!-- Items in Category -->
+                <div 
+                  v-for="item in group.items" 
+                  :key="item.menuId + '-' + JSON.stringify(item.selectedOptions) + '-' + item.notes + '-' + (item.discount || 0)"
+                  class="bg-slate-950/70 p-3 rounded-xl border border-slate-800 flex items-center justify-between gap-3 text-sm animate-fade-in hover:border-orange-500/50 cursor-pointer active:scale-[0.99] transition-all"
+                  @click="editCartItemConfig(item)"
+                >
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-baseline gap-1.5">
+                      <span class="font-extrabold text-white text-sm">{{ item.menuName }}</span>
+                      <span class="text-xs text-slate-400">x{{ item.quantity }}</span>
+                    </div>
+                    
+                    <!-- Print config detail options -->
+                    <div class="flex flex-wrap gap-1.5 mt-1 text-[11px] font-sans">
+                      <span v-if="item.proteinType" class="bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded">
+                        🥩 {{ item.proteinType }}{{ item.isSpecial ? ' (พิเศษ)' : '' }}
+                      </span>
+                      <span v-for="opt in item.selectedOptions" :key="opt.optionId" class="bg-slate-850 text-orange-400 px-1.5 py-0.5 rounded border border-orange-950/40">
+                        + {{ opt.label }}
+                      </span>
+                      <span v-if="item.discount > 0" class="bg-emerald-955/40 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-950/40 font-bold">
+                        💸 ส่วนลด -฿{{ item.discount }}
+                      </span>
+                      <span v-if="item.notes" class="text-slate-400 font-medium italic block w-full mt-0.5">
+                        📝 {{ item.notes }}
+                      </span>
+                    </div>
+                  </div>
+
+                  <!-- Price & Remove button -->
+                  <div class="flex items-center gap-3">
+                    <span class="font-black text-white">฿{{ item.totalPrice * item.quantity }}</span>
+                    <button 
+                      @click.stop="removeFromCart(item)"
+                      class="text-red-500 hover:text-red-400 font-bold p-1 bg-red-950/30 hover:bg-red-950/60 rounded transition-colors"
+                      title="ลบ"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Checkout / Action Footer block -->
+            <div v-if="cart.length > 0" class="p-4 bg-slate-850 border-t border-slate-800 space-y-3 flex-shrink-0">
+              <!-- Summary Row -->
+              <div class="flex items-center justify-between">
+                <input 
+                  v-model="tableNumber"
+                  type="text" 
+                  placeholder="ระบุเบอร์โต๊ะ (ถ้ามี)..."
+                  class="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white w-32 focus:outline-none focus:border-orange-500 text-xs font-sans"
+                />
+                <div class="text-right">
+                  <span class="text-slate-400 block text-[10px] font-sans">ราคารวมทั้งบิล</span>
+                  <span class="text-2xl font-black text-emerald-400">฿{{ cartTotalPrice }}</span>
+                </div>
+              </div>
+
+              <!-- Confirm Buttons -->
+              <div class="flex gap-2">
+                <button 
+                  @click="clearCart"
+                  class="bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold py-3.5 px-4 rounded-xl border border-slate-750 active:scale-95 transition-all text-sm font-sans"
+                >
+                  ล้างบิล
+                </button>
+                
+                <button 
+                  @click="submitOrder"
+                  :disabled="isSubmitting"
+                  :class="`flex-1 disabled:opacity-50 text-white font-black py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all text-base font-sans ${
+                    editingOrderId 
+                      ? 'bg-amber-650 hover:bg-amber-600 shadow-amber-950/30' 
+                      : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-950/30'
+                  }`"
+                >
+                  <span v-if="isSubmitting" class="animate-spin text-sm">⏳</span>
+                  <span>{{ editingOrderId ? '💾 บันทึกการแก้ไข' : '✅ ยืนยันออร์เดอร์ (ชำระเงิน)' }}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab Content: Active Orders -->
+          <div v-else-if="activeTab === 'active_orders'" class="flex-1 flex flex-col min-h-0 overflow-hidden">
+            <!-- Empty Active Orders state -->
+            <div v-if="activeOrders.length === 0" class="flex-1 flex flex-col items-center justify-center text-center p-6 bg-slate-950/20">
+              <span class="text-3xl block mb-2 opacity-50">📋</span>
+              <p class="text-slate-500 text-sm font-medium">ไม่มีออเดอร์ค้างเตรียมในระบบ</p>
+            </div>
+
+            <!-- Active Orders List -->
+            <div v-else class="flex-1 overflow-y-auto p-3 space-y-3 min-h-0">
+              <div 
+                v-for="order in activeOrders" 
+                :key="order.id"
+                :class="`bg-slate-950/70 p-3 rounded-2xl border transition-all duration-200 ${
+                  editingOrderId === order.id 
+                    ? 'border-amber-500 bg-amber-950/10' 
+                    : 'border-slate-800'
+                }`"
+              >
+                <div class="flex items-center justify-between mb-2">
+                  <span class="font-extrabold text-white flex items-center gap-1.5">
+                    <span>#{{ order.id }}</span>
+                    <span class="text-xs text-slate-400 font-normal">({{ order.location || 'POS หน้าร้าน' }})</span>
+                  </span>
+                  <span :class="`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                    order.status === 'Pending' ? 'bg-amber-950 text-amber-400 border border-amber-900/40' :
+                    order.status === 'Cooking' ? 'bg-blue-950 text-blue-400 border border-blue-900/40' :
+                    'bg-emerald-950 text-emerald-400 border border-emerald-900/40'
+                  }`">
+                    {{ order.status === 'Pending' ? 'รอทำ' : order.status === 'Cooking' ? 'กำลังปรุง' : 'เสร็จแล้ว' }}
+                  </span>
+                </div>
+
+                <!-- Order Items list -->
+                <div class="text-xs text-slate-300 space-y-1 pl-1 py-1.5 border-t border-b border-slate-800/50 my-2 font-sans">
+                  <div v-for="item in order.items" :key="item.id" class="leading-relaxed">
+                    <span class="font-bold text-white">{{ item.menu_name }}</span>
+                    <span class="text-slate-400 font-semibold ml-1">x{{ item.quantity }}</span>
+                    <div class="pl-2 text-[10px] text-slate-400 font-sans flex flex-wrap gap-1 mt-0.5">
+                      <span v-if="item.protein_type" class="bg-slate-800 text-slate-300 px-1 py-0.2 rounded text-[9px]">
+                        🥩 {{ item.protein_type }}{{ item.is_special ? ' (พิเศษ)' : '' }}{{ item.is_takeaway ? ' (กล่อง)' : '' }}
+                      </span>
+                      <span v-for="opt in item.options" :key="opt.option_id" class="bg-slate-850 text-orange-400 px-1 py-0.2 rounded text-[9px] border border-orange-950/20">
+                        + {{ opt.label }}
+                      </span>
+                      <span v-if="item.notes" class="text-slate-400 italic block w-full">
+                        📝 {{ item.notes }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-between mb-3 text-xs font-sans">
+                  <span class="text-slate-400">ราคารวม: <span class="font-black text-emerald-400 text-sm">฿{{ order.total_price }}</span></span>
+                  <span class="font-mono text-slate-500">{{ formatOrderTime(order.created_at) }}</span>
+                </div>
+
+                <!-- Actions buttons -->
+                <div class="grid grid-cols-3 gap-1.5">
+                  <button 
+                    @click="archiveOrder(order.id)"
+                    class="bg-emerald-700 hover:bg-emerald-600 text-white text-[11px] font-bold py-2 px-1 rounded-xl transition-all active:scale-95"
+                    title="เก็บประวัติออเดอร์นี้"
+                  >
+                    📥 เก็บ (Archive)
+                  </button>
+                  <button 
+                    @click="editOrder(order)"
+                    class="bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-bold py-2 px-1 rounded-xl transition-all active:scale-95"
+                    title="แก้ไขหรือเพิ่มรายการอาหาร"
+                  >
+                    ✏️ แก้ไข/เพิ่ม
+                  </button>
+                  <button 
+                    @click="printActiveOrderReceipt(order)"
+                    class="bg-slate-700 hover:bg-slate-650 text-slate-200 text-[11px] font-bold py-2 px-1 rounded-xl transition-all active:scale-95"
+                    title="พิมพ์ใบเสร็จออเดอร์นี้"
+                  >
+                    🖨️ ใบเสร็จ
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
       </aside>
 
-      <!-- Reopen tab (lg+, when panel is closed) -->
-      <button
-        v-show="!trackerOpen"
-        @click="toggleTracker"
-        class="hidden lg:flex fixed right-0 top-1/2 -translate-y-1/2 z-20 bg-white shadow-lg border border-gray-200 rounded-l-xl px-2 py-4 flex-col items-center gap-1.5 text-gray-500 hover:text-orange-500 hover:bg-orange-50 transition-colors"
-        title="เปิดแถบออเดอร์"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
-        <span class="text-xs" style="writing-mode:vertical-rl">📋 ออเดอร์</span>
-        <span v-if="visibleTrackedOrders.length" class="w-5 h-5 bg-orange-500 text-white text-xs rounded-full flex items-center justify-center font-bold">{{ visibleTrackedOrders.length }}</span>
-      </button>
-      </div><!-- /lg:grid -->
     </div>
 
-    <!-- Mobile: tracker floating button -->
-    <Transition name="slide-up">
-      <button
-        v-if="visibleTrackedOrders.length > 0"
-        @click="showTrackerDrawer = true"
-        class="fixed bottom-28 right-4 z-30 bg-gray-800 text-white w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg lg:hidden"
-      >
-        <span class="text-xl">📋</span>
-        <span class="absolute -top-1 -right-1 w-5 h-5 bg-orange-500 rounded-full text-xs flex items-center justify-center font-bold">{{ visibleTrackedOrders.length }}</span>
-      </button>
-    </Transition>
-
-    <!-- Mobile: tracker drawer -->
-    <Teleport to="body">
-      <Transition name="modal">
-        <div v-if="showTrackerDrawer" class="fixed inset-0 z-50 flex items-end justify-center lg:hidden">
-          <div class="absolute inset-0 bg-black/60" @click="showTrackerDrawer = false"></div>
-          <div class="relative bg-white w-full max-w-lg max-h-[70vh] rounded-t-3xl shadow-2xl overflow-hidden flex flex-col animate-slide-up">
-            <div class="p-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
-              <h2 class="font-bold text-gray-800">📋 ออเดอร์ของฉัน</h2>
-              <button @click="showTrackerDrawer = false" class="w-8 h-8 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center text-gray-500 transition-colors">✕</button>
-            </div>
-            <div class="flex-1 overflow-y-auto">
-              <div v-if="visibleTrackedOrders.length === 0" class="p-8 text-center text-gray-400 text-sm">ยังไม่มีออเดอร์ที่กำลังดำเนินการ</div>
-              <div v-else class="divide-y divide-gray-50">
-                <div v-for="order in visibleTrackedOrders" :key="order.id" class="p-4">
-                  <div class="flex items-center justify-between mb-2">
-                    <span class="text-sm text-gray-500 font-medium">#{{ order.id }}</span>
-                    <span class="text-sm px-3 py-0.5 rounded-full font-medium" :class="getStatusColor(order.status)">
-                      {{ getStatusLabel(order.status) }}
-                    </span>
-                  </div>
-                  <div class="space-y-1.5">
-                    <div v-for="item in order.items" :key="item.id" class="flex items-center gap-2 text-sm text-gray-700">
-                      <span class="font-medium flex-1">{{ item.menu_name }}</span>
-                      <span class="text-gray-400">x{{ item.quantity }}</span>
-                      <span v-if="item.protein_type && item.protein_type !== 'หมู'" class="text-amber-600 text-xs">({{ item.protein_type }})</span>
-                      <button
-                        v-if="order.status === 'Pending'"
-                        @click="openTrackerItemEdit(item, order)"
-                        class="w-6 h-6 bg-blue-100 hover:bg-blue-200 text-blue-600 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors"
-                        title="แก้ไข"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-                      </button>
-                    </div>
-                  </div>
-                  <p class="text-sm text-gray-400 mt-1.5">฿{{ Number(order.total_price).toLocaleString() }}</p>
-                </div>
-              </div>
-            </div>
+    <!-- RECEIPT PREVIEW MODAL -->
+    <Transition name="fade">
+      <div v-if="showReceiptModal && receiptData" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <!-- Backdrop -->
+        <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" @click="showReceiptModal = false"></div>
+        
+        <!-- Modal Content -->
+        <div class="relative bg-slate-900 border border-slate-700/80 rounded-3xl shadow-2xl p-6 max-w-sm w-full z-10 flex flex-col max-h-[90vh] animate-fade-in">
+          <div class="text-center border-b border-slate-800 pb-3 mb-4">
+            <span class="text-3xl">🧾</span>
+            <h3 class="text-lg font-bold text-white mt-1">ตัวอย่างใบเสร็จ</h3>
+            <p class="text-xs text-slate-400">ออร์เดอร์ #{{ receiptData.orderId }} บันทึกสำเร็จ</p>
           </div>
-        </div>
-      </Transition>
-    </Teleport>
-
-    <!-- Options Modal -->
-    <Teleport to="body">
-      <Transition name="modal">
-        <div
-          v-if="showModal && selectedMenu"
-          class="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
-        >
-          <!-- Backdrop -->
-          <div
-            class="absolute inset-0 bg-black/60"
-            @click="closeModal"
-          ></div>
-
-          <!-- Modal Content: 2-col on sm+, single-col scroll on mobile -->
-          <div
-            class="relative bg-white w-full max-w-5xl rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-slide-up transition-all duration-300"
-            :class="modalCompact ? 'max-h-[65vh]' : 'max-h-[92vh] sm:max-h-[88vh]'"
-          >
-
-            <!-- Close button: top-right corner of modal -->
-            <button
-              @click="closeModal"
-              class="absolute top-3 right-3 z-10 w-8 h-8 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center text-gray-500 transition-colors shadow-sm"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-
-            <!-- 2-col body -->
-            <div class="flex-1 min-h-0 flex flex-col sm:flex-row overflow-hidden">
-
-              <!-- LEFT: image strip (full height on sm+) -->
-              <div class="sm:w-[150px] flex-shrink-0 relative sm:border-r border-gray-100">
-                <div class="h-28 sm:h-full sm:absolute sm:inset-0 bg-gray-100">
-                  <img :src="selectedMenu.image_url" :alt="selectedMenu.name" class="w-full h-full object-cover">
-                  <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/5 to-transparent"></div>
-                  <div class="absolute bottom-2.5 left-2.5 right-2.5">
-                    <p class="text-white font-black text-sm leading-tight line-clamp-2">{{ selectedMenu.name }}</p>
-                    <p class="text-white/70 text-xs mt-0.5">฿{{ selectedMenu.base_price }}</p>
-                  </div>
+          
+          <!-- Receipt Paper Slip Preview (White Paper style for visual realism) -->
+          <div class="flex-1 overflow-y-auto bg-white text-slate-900 p-4 rounded-xl font-mono text-xs shadow-inner select-none border border-slate-200">
+            <div class="text-center font-bold text-sm mb-1">🍜☕ POS Counter</div>
+            <div class="text-center text-[10px] text-slate-500 mb-2">ใบสั่งสินค้า / ใบเสร็จรับเงิน</div>
+            
+            <div class="space-y-1 mb-3">
+              <div>ออร์เดอร์: #{{ receiptData.orderId }}</div>
+              <div>วันที่: {{ receiptData.date }}</div>
+              <div>จุดบริการ: {{ receiptData.location }}</div>
+            </div>
+            
+            <div class="border-t border-dashed border-slate-400 my-2"></div>
+            
+            <div class="space-y-3">
+              <div v-for="group in groupedReceiptData" :key="group.category.id || 'unknown'">
+                <!-- Category Heading inside thermal preview -->
+                <div class="text-[10px] font-black text-slate-500 border-b border-dashed border-slate-350 pb-0.5 mb-1.5">
+                  {{ group.category.icon }} {{ group.category.name === 'Food' ? 'อาหาร' : group.category.name === 'Beverage' ? 'เครื่องดื่ม' : group.category.name === 'Dessert' ? 'ของหวาน' : group.category.name }}
                 </div>
-              </div>
-
-              <!-- RIGHT: all controls, scrollable -->
-              <div class="flex-1 overflow-y-auto min-h-0">
-
-                <!-- Protein + Takeaway/Special -->
-                <div class="px-4 py-3 border-b border-gray-100">
-                  <div class="flex flex-wrap gap-2">
-                    <span class="self-center text-sm text-gray-400">🥩</span>
-                    <button
-                      v-for="p in proteins"
-                      :key="p"
-                      @click="selectedProtein = p"
-                      class="px-3.5 py-2 rounded-xl text-sm font-semibold transition-colors"
-                      :class="selectedProtein === p ? 'bg-orange-500 text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
-                    >{{ p }}</button>
-                    <div class="w-px bg-gray-200 self-stretch mx-0.5"></div>
-                    <label
-                      class="flex items-center gap-1.5 px-3.5 py-2 rounded-xl cursor-pointer transition-colors text-sm font-semibold"
-                      :class="isTakeaway ? 'bg-orange-100 text-orange-700 ring-1 ring-orange-300' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
-                    >
-                      <input type="checkbox" v-model="isTakeaway" class="hidden">
-                      <span>📦</span><span>ใส่กล่อง</span>
-                    </label>
-                    <label
-                      class="flex items-center gap-1.5 px-3.5 py-2 rounded-xl cursor-pointer transition-colors text-sm font-semibold"
-                      :class="isSpecial ? 'bg-orange-100 text-orange-700 ring-1 ring-orange-300' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
-                    >
-                      <input type="checkbox" v-model="isSpecial" class="hidden">
-                      <span>⭐</span><span>พิเศษ</span>
-                      <span class="text-[11px] px-1.5 py-0.5 bg-orange-500 text-white rounded-full">+฿10</span>
-                    </label>
+                
+                <!-- Items in category -->
+                <div v-for="(item, idx) in group.items" :key="idx" class="mb-2">
+                  <div class="flex justify-between font-bold">
+                    <span class="w-[60%] truncate">{{ item.menuName }}</span>
+                    <span class="w-[15%] text-center">x{{ item.quantity }}</span>
+                    <span class="w-[25%] text-right">฿{{ item.totalPrice * item.quantity }}</span>
                   </div>
-                </div>
-
-                <!-- Options -->
-                <div class="px-4 py-3 border-b border-gray-100">
-                  <p class="text-xs font-semibold text-gray-400 mb-2.5">🍳 Options เพิ่มเติม</p>
-                  <div v-if="options.length === 0" class="text-sm text-gray-400">ไม่มี Options ให้เลือก</div>
-                  <div class="flex flex-wrap gap-2">
-                    <div
-                      v-for="option in options"
-                      :key="option.id"
-                      @click="getOptionQty(option.id) === 0 && incrementOption(option.id)"
-                      class="flex items-center gap-2 px-3 py-2.5 rounded-xl border transition-colors select-none"
-                      :class="getOptionQty(option.id) > 0
-                        ? 'bg-orange-50 border-orange-300'
-                        : 'bg-gray-50 border-gray-200 cursor-pointer hover:bg-orange-50 hover:border-orange-200 active:scale-[0.97]'"
-                    >
-                      <div v-if="option.image_url" class="w-7 h-7 rounded-lg overflow-hidden flex-shrink-0">
-                        <img :src="option.image_url" :alt="option.label" class="w-full h-full object-cover" loading="lazy" decoding="async">
-                      </div>
-                      <span class="text-sm font-medium text-gray-700 flex-1">{{ option.label }}</span>
-                      <span class="text-xs text-orange-500">+฿{{ option.extra_price }}</span>
-                      <!-- qty = 0: no button, whole card is the tap target -->
-                      <div v-if="getOptionQty(option.id) === 0" class="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
-                        <svg class="w-3 h-3 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
-                        </svg>
-                      </div>
-                      <!-- qty > 0: stepper, stop propagation so card click doesn't fire -->
-                      <div v-else class="flex items-center gap-1" @click.stop>
-                        <button @click="decrementOption(option.id)" class="w-8 h-8 bg-orange-100 hover:bg-orange-200 text-orange-600 rounded-lg flex items-center justify-center font-bold transition-colors">−</button>
-                        <span class="w-6 text-center font-bold text-orange-600 text-sm">{{ getOptionQty(option.id) }}</span>
-                        <button @click="incrementOption(option.id)" class="w-8 h-8 bg-orange-500 hover:bg-orange-600 text-white rounded-lg flex items-center justify-center font-bold transition-colors">+</button>
-                      </div>
+                  <div class="pl-2 text-[10px] text-slate-600 font-mono">
+                    <span v-if="item.proteinType">🥩 {{ item.proteinType }}{{ item.isSpecial ? ' (พิเศษ)' : '' }}</span>
+                    <div v-for="opt in item.selectedOptions" :key="opt.optionId">
+                      + {{ opt.label }}
                     </div>
+                    <div v-if="item.discount > 0" class="text-emerald-600 font-bold">
+                      💸 ส่วนลด -฿{{ item.discount }}
+                    </div>
+                    <div v-if="item.notes" class="italic font-sans">📝 {{ item.notes }}</div>
                   </div>
                 </div>
-
-                <!-- Notes -->
-                <div class="px-4 py-3">
-                  <p class="text-xs font-semibold text-gray-400 mb-2">📝 หมายเหตุ</p>
-                  <div class="flex flex-wrap gap-1.5 mb-2.5">
-                    <button
-                      v-for="qn in quickNotes"
-                      :key="qn"
-                      @click="addQuickNote(qn)"
-                      class="px-3 py-1.5 bg-gray-100 hover:bg-orange-100 text-gray-600 hover:text-orange-700 rounded-full text-sm font-medium transition-colors"
-                    >{{ qn }}</button>
-                  </div>
-                  <textarea
-                    v-model="notes"
-                    placeholder="เขียนคำอธิบายเพิ่มเติม..."
-                    rows="2"
-                    class="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-400 focus:border-orange-400 outline-none resize-none text-gray-700 text-sm"
-                  ></textarea>
-                </div>
-
               </div>
             </div>
-
-            <!-- Modal footer -->
-            <div class="flex-shrink-0 border-t border-gray-100 px-4 py-3 flex items-center gap-2 bg-white">
-              <!-- Compact toggle (far left) -->
-              <button
-                @click="toggleModalCompact"
-                class="w-7 h-7 rounded-lg flex items-center justify-center transition-colors text-gray-300 hover:text-gray-500 hover:bg-gray-100 flex-shrink-0"
-                :title="modalCompact ? 'ขยายหน้าต่าง' : 'ย่อหน้าต่าง'"
-              >
-                <svg v-if="modalCompact" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"/>
-                </svg>
-                <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
-                </svg>
-              </button>
-
-              <div class="flex-1"></div>
-
-              <!-- Price (right-aligned) -->
-              <div class="text-right flex-shrink-0">
-                <p class="text-gray-400 text-xs leading-none mb-0.5">฿{{ pricePerDish }} × {{ dishQuantity }}</p>
-                <p class="text-lg font-black text-orange-600 leading-none">฿{{ currentItemPrice.toLocaleString() }}</p>
-              </div>
-
-              <!-- Qty controls (right) -->
-              <div class="flex items-center gap-1 flex-shrink-0">
-                <button
-                  @click="decrementDish"
-                  :disabled="dishQuantity <= 1"
-                  class="w-9 h-9 bg-gray-100 border border-gray-200 rounded-xl flex items-center justify-center text-gray-600 hover:border-orange-400 hover:text-orange-500 disabled:opacity-40 disabled:cursor-not-allowed font-bold transition-colors text-lg"
-                >−</button>
-                <span class="w-7 text-center font-black text-base text-gray-800">{{ dishQuantity }}</span>
-                <button
-                  @click="incrementDish"
-                  class="w-9 h-9 bg-orange-500 rounded-xl flex items-center justify-center text-white hover:bg-orange-600 font-bold transition-colors text-lg"
-                >+</button>
-              </div>
-
-              <!-- Add button (far right) -->
-              <button
-                @click="addToCart"
-                class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-orange-400 to-red-500 text-white text-sm font-bold shadow-md shadow-orange-200 active:scale-95 transition-transform flex-shrink-0"
-              >
-                {{ editingOrderItem ? 'บันทึก (สั่งแล้ว)' : editingIndex !== null ? 'บันทึก' : 'เพิ่ม' }}
-              </button>
+            
+            <div class="border-t border-dashed border-slate-400 my-2"></div>
+            
+            <div class="flex justify-between font-black text-sm text-slate-900">
+              <span>ราคารวมทั้งสิ้น:</span>
+              <span>฿{{ receiptData.totalPrice }}</span>
             </div>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
-
-    <!-- Floating Cart Summary (Clickable) -->
-    <Transition name="slide-up">
-      <div 
-        v-if="totalItems > 0"
-        class="fixed bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-lg z-40"
-      >
-        <div 
-          @click="showCartModal = true"
-          class="bg-gradient-to-r from-orange-500 to-red-500 rounded-3xl p-4 sm:p-5 shadow-xl flex items-center justify-between gap-4 text-white cursor-pointer"
-        >
-          <div class="flex items-center gap-4">
-            <div class="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center">
-              <span class="text-3xl">🍽️</span>
-            </div>
-            <div>
-              <p class="text-white/80 text-sm font-medium">{{ totalItems }} รายการ</p>
-              <p class="text-2xl font-black">฿{{ totalPrice.toLocaleString() }}</p>
+            
+            <div class="text-center text-[10px] text-slate-500 mt-4">
+              🙏 ขอบคุณที่ใช้บริการค่ะ / Thank you 🙏
             </div>
           </div>
           
-          <button 
-            @click.stop="showCartModal = true"
-            class="bg-white text-orange-600 px-6 py-3 rounded-2xl font-bold hover:bg-orange-50 active:scale-95 transition-all shadow-lg"
-          >
-            ดูออเดอร์
-          </button>
+          <!-- Action Buttons -->
+          <div class="grid grid-cols-2 gap-3 mt-5 pt-3 border-t border-slate-800 flex-shrink-0">
+            <button 
+              @click="showReceiptModal = false"
+              class="py-3 bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold rounded-xl text-sm transition-colors active:scale-95"
+            >
+              ✕ ปิดหน้าต่าง
+            </button>
+            <button 
+              @click="printReceipt"
+              class="py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-sm transition-all flex items-center justify-center gap-1.5 active:scale-95 shadow-lg shadow-emerald-950/40"
+            >
+              <span>🖨️ พิมพ์ใบเสร็จ</span>
+            </button>
+          </div>
         </div>
       </div>
     </Transition>
 
-    <!-- Confirm Clear Cart Dialog -->
-    <Teleport to="body">
-      <Transition name="modal">
-        <div v-if="confirmClearCart" class="fixed inset-0 z-[60] flex items-center justify-center p-4">
-          <div class="absolute inset-0 bg-black/60" @click="confirmClearCart = false"></div>
-          <div class="relative bg-white rounded-3xl shadow-xl p-6 max-w-sm w-full">
-            <div class="text-center">
-              <div class="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                <span class="text-2xl">🗑️</span>
+    <!-- PRINT-ONLY RECEIPT ELEMENT (HIDDEN ON SCREEN, VISIBLE ON PRINT) -->
+    <div id="receipt-print-area" class="text-black bg-white p-4 font-mono text-sm leading-normal">
+      <div v-if="receiptData" class="space-y-2">
+        <div class="text-center font-bold text-lg">🍜☕ POS Counter</div>
+        <div class="text-center text-xs">ใบเสร็จรับเงิน / ใบสั่งเตรียมของ</div>
+        <div class="h-2"></div>
+        
+        <div>เลขที่ออร์เดอร์: #{{ receiptData.orderId }}</div>
+        <div>วันที่: {{ receiptData.date }}</div>
+        <div>จุดจัดส่ง: {{ receiptData.location }}</div>
+        
+        <div class="border-t border-dashed border-black my-2"></div>
+        
+        <div class="flex justify-between font-bold text-xs">
+          <span class="w-[60%]">รายการ</span>
+          <span class="w-[15%] text-center">จำนวน</span>
+          <span class="w-[25%] text-right">ราคา</span>
+        </div>
+        <div class="border-t border-black my-1"></div>
+        
+        <div v-for="group in groupedReceiptData" :key="group.category.id || 'unknown'" class="text-xs">
+          <!-- Category Header -->
+          <div class="font-bold border-b border-black pb-0.5 mt-2 mb-1">
+            {{ group.category.icon }} {{ group.category.name === 'Food' ? 'อาหาร' : group.category.name === 'Beverage' ? 'เครื่องดื่ม' : group.category.name === 'Dessert' ? 'ของหวาน' : group.category.name }}
+          </div>
+          <div v-for="(item, idx) in group.items" :key="idx" class="mb-1">
+            <div class="flex justify-between">
+              <span class="w-[60%] font-bold">{{ item.menuName }}</span>
+              <span class="w-[15%] text-center">x{{ item.quantity }}</span>
+              <span class="w-[25%] text-right">฿{{ item.totalPrice * item.quantity }}</span>
+            </div>
+            <div class="pl-2 text-[10px] text-gray-800">
+              <span v-if="item.proteinType">🥩 {{ item.proteinType }}{{ item.isSpecial ? ' (พิเศษ)' : '' }}</span>
+              <div v-for="opt in item.selectedOptions" :key="opt.optionId">
+                + {{ opt.label }}
               </div>
-              <h3 class="text-lg font-bold text-gray-800 mb-1">ยกเลิกทั้งหมด?</h3>
-              <p class="text-gray-500 text-sm mb-5">รายการทั้งหมดจะถูกลบออก</p>
-              <div class="flex gap-3">
-                <button @click="confirmClearCart = false" class="flex-1 py-3 rounded-2xl border-2 border-gray-200 text-gray-600 font-bold">ไม่ลบ</button>
-                <button @click="clearCart" class="flex-1 py-3 rounded-2xl bg-red-500 text-white font-bold">ลบเลย</button>
+              <div v-if="item.discount > 0" class="font-bold">
+                💸 ส่วนลด -฿{{ item.discount }}
               </div>
+              <div v-if="item.notes" class="italic">📝 {{ item.notes }}</div>
             </div>
           </div>
         </div>
-      </Transition>
-    </Teleport>
-
-    <!-- Cart Modal -->
-    <Teleport to="body">
-      <Transition name="modal">
-        <div 
-          v-if="showCartModal" 
-          class="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
-        >
-          <!-- Backdrop -->
-          <div 
-            class="absolute inset-0 bg-black/60"
-            @click="showCartModal = false"
-          ></div>
-          
-          <!-- Cart Modal Content -->
-          <div class="relative bg-white w-full max-w-lg max-h-[90vh] rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-slide-up">
-            
-            <!-- Header -->
-            <div class="flex-shrink-0 p-6 border-b border-gray-100 flex items-center justify-between">
-              <div>
-                <h2 class="text-2xl font-black text-gray-800">🍽️ รายการสั่งอาหาร</h2>
-                <p class="text-gray-500 text-sm">{{ totalItems }} รายการ</p>
-              </div>
-              <button 
-                @click="showCartModal = false"
-                class="w-10 h-10 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center text-gray-600 transition-colors"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            
-            <!-- Cart Items List -->
-            <div class="flex-1 overflow-y-auto p-6 space-y-4">
-              <div v-if="cart.length === 0" class="text-center py-12 text-gray-500">
-                <span class="text-6xl mb-4 block">🍽️</span>
-                <p>ยังไม่มีรายการสั่ง</p>
-              </div>
-              
-              <div
-                v-for="(item, index) in cart"
-                :key="index"
-                class="bg-gray-50 rounded-2xl p-3"
-              >
-                <div class="flex items-start justify-between gap-2">
-                  <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-2 flex-wrap">
-                      <h3 class="font-bold text-gray-800">{{ item.menuName }}</h3>
-                      <span class="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">{{ item.proteinType || 'หมู' }}</span>
-                    </div>
-
-                    <!-- Options + flags inline -->
-                    <div class="mt-1.5 flex flex-wrap gap-1">
-                      <span
-                        v-for="opt in item.selectedOptions"
-                        :key="opt.optionId"
-                        class="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full"
-                      >{{ opt.label }}{{ opt.quantity > 1 ? ` x${opt.quantity}` : '' }}</span>
-                      <span v-if="item.isTakeaway" class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">📦 ใส่กล่อง</span>
-                      <span v-if="item.isSpecial" class="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">⭐ พิเศษ</span>
-                    </div>
-
-                    <!-- Notes -->
-                    <p v-if="item.notes" class="mt-1 text-xs text-gray-500 truncate">📝 {{ item.notes }}</p>
-
-                    <!-- Price -->
-                    <p class="mt-1.5 text-sm text-gray-500">฿{{ item.totalPrice }} x {{ item.quantity }} = <span class="font-bold text-orange-600">฿{{ (item.totalPrice * item.quantity).toLocaleString() }}</span></p>
-                  </div>
-
-                  <!-- Edit + Remove buttons -->
-                  <div class="flex gap-1 flex-shrink-0">
-                    <button
-                      @click="editCartItem(index)"
-                      class="w-8 h-8 bg-blue-100 hover:bg-blue-200 text-blue-600 rounded-lg flex items-center justify-center transition-colors"
-                      title="แก้ไข"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                    </button>
-                    <button
-                      @click="removeCartItem(index)"
-                      class="w-8 h-8 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg flex items-center justify-center transition-colors"
-                      title="ลบ"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Quantity Controls -->
-                <div class="flex items-center justify-between mt-2 pt-2 border-t border-gray-200">
-                  <span class="text-gray-500 text-xs">จำนวน</span>
-                  <div class="flex items-center gap-1.5">
-                    <button
-                      @click="decrementCartItem(index)"
-                      class="w-7 h-7 bg-white border border-gray-200 rounded-lg flex items-center justify-center text-gray-600 hover:border-orange-400 hover:text-orange-500 transition-colors font-bold text-sm"
-                    >−</button>
-                    <span class="w-8 text-center font-bold text-gray-800 text-sm">{{ item.quantity }}</span>
-                    <button
-                      @click="incrementCartItem(index)"
-                      class="w-7 h-7 bg-orange-500 rounded-lg flex items-center justify-center text-white hover:bg-orange-600 transition-colors font-bold text-sm"
-                    >+</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            <!-- Footer -->
-            <div class="flex-shrink-0 p-6 bg-white border-t border-gray-100 space-y-4">
-              <!-- Total -->
-              <div class="flex items-center justify-between">
-                <span class="text-gray-600 font-medium">ยอดรวมทั้งหมด</span>
-                <span class="text-3xl font-black text-orange-600">฿{{ totalPrice.toLocaleString() }}</span>
-              </div>
-              
-              <!-- Action Buttons -->
-              <div class="flex gap-3">
-                <button
-                  @click="confirmClearCart = true"
-                  :disabled="isSubmitting"
-                  class="flex-1 py-3 rounded-2xl border-2 border-gray-200 text-gray-600 font-bold hover:bg-gray-50 active:scale-95 transition-all disabled:opacity-50"
-                >
-                  ยกเลิกทั้งหมด
-                </button>
-                <button 
-                  @click="submitOrder"
-                  :disabled="isSubmitting"
-                  class="flex-[2] py-3 rounded-2xl bg-gradient-to-r from-orange-400 to-red-500 text-white font-bold shadow-lg shadow-orange-200 hover:shadow-xl active:scale-95 transition-all disabled:opacity-70 flex items-center justify-center gap-2"
-                >
-                  <svg v-if="isSubmitting" class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  <span>{{ isSubmitting ? 'กำลังสั่ง...' : 'ยืนยันสั่งอาหาร' }}</span>
-                </button>
-              </div>
-            </div>
-          </div>
+        
+        <div class="border-t border-dashed border-black my-2"></div>
+        
+        <div class="flex justify-between font-bold text-sm">
+          <span>ราคารวมทั้งสิ้น (Total):</span>
+          <span>฿{{ receiptData.totalPrice }}</span>
         </div>
-      </Transition>
-    </Teleport>
+        
+        <div class="h-6"></div>
+        <div class="text-center text-xs font-bold">🙏 ขอบคุณที่ใช้บริการค่ะ 🙏</div>
+      </div>
+    </div>
+
   </div>
 </template>
 
 <style scoped>
-.ring-3 {
-  --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);
-  --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(3px + var(--tw-ring-offset-width)) var(--tw-ring-color);
-  box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+/* Scrollbar optimizations for Cashier touchscreen POS */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #020617;
+}
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
 }
 
-.modal-enter-active,
-.modal-leave-active {
-  transition: opacity 0.15s ease;
+/* Print Media stylesheet */
+@media print {
+  /* Hide the entire Nuxt app structure */
+  #__nuxt, #nuxt-app, header, main, aside, div, button {
+    display: none !important;
+  }
+  
+  /* Show only the print-only receipt element */
+  #receipt-print-area {
+    display: block !important;
+    width: 100% !important;
+    max-width: 80mm !important; /* Standard thermal printer width */
+    margin: 0 auto !important;
+    padding: 10px !important;
+    color: #000 !important;
+    background: #fff !important;
+    font-family: 'Courier New', Courier, monospace !important;
+    box-sizing: border-box;
+  }
 }
-.modal-enter-active .animate-slide-up,
-.modal-leave-active .animate-slide-up {
-  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.modal-enter-from,
-.modal-leave-to { opacity: 0; }
-.modal-enter-from .animate-slide-up,
-.modal-leave-to .animate-slide-up { transform: translateY(100%); }
 
-.slide-up-enter-active,
-.slide-up-leave-active {
-  transition: all 0.2s ease;
+#receipt-print-area {
+  display: none;
 }
-.slide-up-enter-from,
-.slide-up-leave-to {
+
+/* Animations for modal transitions */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
   opacity: 0;
-  transform: translateX(-50%) translateY(1rem);
 }
 
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Force full screen overlay in portrait mode to completely cover other elements */
+@media (orientation: portrait) {
+  .modifier-panel {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    z-index: 9999 !important;
+    background-color: #0f172a !important; /* bg-slate-900 */
+    border: none !important;
+  }
+}
 </style>
