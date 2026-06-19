@@ -45,6 +45,31 @@ const totalOrders = computed(() => {
   return historyData.value.reduce((sum: number, day: any) => sum + day.orderCount, 0)
 })
 
+// ===== DEPT REVENUE VIEW =====
+const { data: deptResult } = await useFetch<{ success: boolean, data: any[] }>('/api/admin/revenue-by-dept')
+const deptRevenue = computed(() => deptResult.value?.data || [])
+const totalDeptRevenue = computed(() => {
+  return deptRevenue.value.reduce((sum: number, r: any) => sum + r.revenue, 0)
+})
+
+function getDeptName(dept: string) {
+  switch (dept) {
+    case 'Kitchen': return '🍳 อาหาร'
+    case 'Barista': return '☕ เครื่องดื่ม'
+    case 'Bakery': return '🍰 ของหวาน'
+    default: return dept
+  }
+}
+
+function getDeptColorClass(dept: string) {
+  switch (dept) {
+    case 'Kitchen': return 'bg-orange-500'
+    case 'Barista': return 'bg-blue-500'
+    case 'Bakery': return 'bg-pink-500'
+    default: return 'bg-gray-500'
+  }
+}
+
 // ===== MONTHLY VIEW =====
 const currentYear = new Date().getFullYear()
 const selectedYear = ref(currentYear)
@@ -126,6 +151,34 @@ function formatTime(dateString: string) {
         >
           🗓️ รายเดือน
         </button>
+      </div>
+    </div>
+
+    <!-- Department Revenue Breakdown Card -->
+    <div v-if="deptRevenue.length > 0" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
+      <h3 class="text-sm font-bold text-gray-400 mb-4 uppercase tracking-wider">📊 สัดส่วนรายได้สะสมแยกตามฝ่าย</h3>
+      <div class="space-y-4">
+        <!-- Visual Bar -->
+        <div class="h-4 w-full bg-gray-100 rounded-full overflow-hidden flex">
+          <div 
+            v-for="dept in deptRevenue" 
+            :key="dept.dept"
+            :class="getDeptColorClass(dept.dept)"
+            :style="{ width: `${(dept.revenue / Math.max(totalDeptRevenue, 1)) * 100}%` }"
+            :title="`${getDeptName(dept.dept)}: ฿${dept.revenue}`"
+          ></div>
+        </div>
+        <!-- Legend -->
+        <div class="grid grid-cols-3 gap-4">
+          <div v-for="dept in deptRevenue" :key="dept.dept" class="flex flex-col">
+            <span class="text-xs text-gray-500 flex items-center gap-1.5">
+              <span :class="`w-2.5 h-2.5 rounded-full ${getDeptColorClass(dept.dept)}`"></span>
+              {{ getDeptName(dept.dept) }}
+            </span>
+            <span class="text-base font-bold text-gray-800 mt-1">฿{{ dept.revenue.toLocaleString() }}</span>
+            <span class="text-[11px] text-gray-400 font-medium">{{ dept.itemCount }} รายการ</span>
+          </div>
+        </div>
       </div>
     </div>
 

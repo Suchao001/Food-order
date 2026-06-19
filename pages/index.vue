@@ -45,6 +45,46 @@
       </div>
     </NuxtLink>
 
+    <!-- Cafe POS Section (Cashier) -->
+    <NuxtLink 
+      to="/order/cafe" 
+      class="flex-1 relative group overflow-hidden flex flex-col items-center justify-center p-8 md:p-12 text-center transition-all duration-700 hover:flex-[1.3]"
+    >
+      <!-- Warm Amber/Coffee Gradient Background -->
+      <div class="absolute inset-0 bg-gradient-to-br from-amber-600 via-orange-600 to-amber-900 animate-gradient-slow" style="animation-delay: -2s;"></div>
+      
+      <!-- Overlay Pattern -->
+      <div class="absolute inset-0 opacity-10" style="background-image: url('data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23ffffff\' fill-opacity=\'1\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E');"></div>
+      
+      <!-- Floating Elements -->
+      <div class="absolute inset-0 overflow-hidden pointer-events-none">
+        <div class="absolute top-1/3 left-1/3 w-40 h-40 bg-white/10 rounded-full blur-3xl animate-float"></div>
+        <div class="absolute bottom-1/4 left-1/4 w-32 h-32 bg-amber-400/20 rounded-full blur-2xl animate-pulse"></div>
+      </div>
+      
+      <!-- Content -->
+      <div class="relative z-10 transform transition-all duration-500 group-hover:scale-105">
+        <!-- Icon Container -->
+        <div class="w-28 h-28 md:w-36 md:h-36 bg-white/20 backdrop-blur-lg rounded-3xl flex items-center justify-center mb-8 mx-auto shadow-2xl border border-white/30 -rotate-3 group-hover:rotate-0 transition-transform duration-500">
+          <span class="text-5xl md:text-6xl">☕</span>
+        </div>
+        
+        <h2 class="text-4xl md:text-6xl font-black text-white mb-4 tracking-tight drop-shadow-lg">
+          Cafe POS
+        </h2>
+        <p class="text-white/80 text-lg md:text-xl max-w-sm mx-auto font-medium leading-relaxed">
+          ระบบคิดเงินแคชเชียร์บาร์น้ำ สั่งง่าย รวดเร็ว สเปกเบา!
+        </p>
+        
+        <div class="mt-10 inline-flex items-center gap-3 px-8 py-4 bg-white text-orange-600 rounded-2xl font-bold shadow-xl transform group-hover:-translate-y-2 group-hover:shadow-2xl transition-all duration-300">
+          <span>เข้าสู่ระบบเครื่องดื่ม</span>
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transform group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3" />
+          </svg>
+        </div>
+      </div>
+    </NuxtLink>
+
     <!-- Staff Section (Admin) -->
     <NuxtLink 
       to="/admin/items" 

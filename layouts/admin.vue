@@ -31,6 +31,13 @@
           <NuxtLink to="/admin/options" class="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 font-medium transition-colors">
             🍳 จัดการ Options
           </NuxtLink>
+          <div class="h-px bg-gray-200 my-3"></div>
+          <NuxtLink to="/kitchen" class="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-750 hover:bg-emerald-50 hover:text-emerald-750 font-bold transition-colors">
+            👨‍🍳 จอห้องครัว
+          </NuxtLink>
+          <NuxtLink to="/barista" class="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-755 hover:bg-emerald-50 hover:text-emerald-755 font-bold transition-colors">
+            ☕ จอบาริสต้า
+          </NuxtLink>
         </nav>
       </aside>
 
@@ -83,9 +90,23 @@
           <NuxtLink 
             to="/admin/options" 
             @click="showMobileMenu = false"
-            class="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 font-medium"
+            class="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 font-medium border-b border-gray-100"
           >
             🍳 จัดการ Options
+          </NuxtLink>
+          <NuxtLink 
+            to="/kitchen" 
+            @click="showMobileMenu = false"
+            class="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 font-medium border-b border-gray-100"
+          >
+            👨‍🍳 จอห้องครัว
+          </NuxtLink>
+          <NuxtLink 
+            to="/barista" 
+            @click="showMobileMenu = false"
+            class="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 font-medium"
+          >
+            ☕ จอบาริสต้า
           </NuxtLink>
         </div>
       </Transition>

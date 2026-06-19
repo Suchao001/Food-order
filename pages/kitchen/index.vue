@@ -10,7 +10,18 @@ const { data: ordersResult, refresh, pending } = await useFetch('/api/orders/ord
   lazy: true
 })
 
-const orders = computed(() => ordersResult.value?.data || [])
+const allOrders = computed(() => ordersResult.value?.data || [])
+const orders = computed(() => {
+  return allOrders.value
+    .map((o: any) => {
+      const kitchenItems = o.items.filter((i: any) => i.menu_dept === 'Kitchen')
+      return {
+        ...o,
+        items: kitchenItems
+      }
+    })
+    .filter((o: any) => o.items.length > 0)
+})
 
 // Robust Polling
 const isPolling = ref(false)
@@ -171,10 +182,25 @@ async function confirmDelete() {
 async function updateStatus(orderId: number, newStatus: string) {
   isUpdating.value = orderId
   try {
-    await $fetch(`/api/orders/${orderId}`, {
-      method: 'PATCH',
-      body: { status: newStatus }
-    })
+    const order = orders.value.find((o: any) => o.id === orderId)
+    if (order && order.items.length > 0) {
+      // Determine what status to set for the items
+      let itemTargetStatus = 'Pending'
+      if (newStatus === 'Cooking') {
+        itemTargetStatus = 'Preparing'
+      } else if (newStatus === 'Completed') {
+        itemTargetStatus = 'Ready'
+      }
+
+      // Update all kitchen items in this order
+      const promises = order.items.map((item: any) => 
+        $fetch(`/api/orders/items/${item.id}/status`, {
+          method: 'PATCH',
+          body: { status: itemTargetStatus }
+        })
+      )
+      await Promise.all(promises)
+    }
     await refresh()
     lastRefreshTime.value = new Date()
   } catch (error) {
