@@ -162,9 +162,9 @@ const getDisplayNameWithoutTemp = (name: string) => {
   return name.replace(/\s*\[(ร้อน|เย็น|ปั่น)\]/g, '').replace(/\s*\((ร้อน|เย็น|ปั่น)\)/g, '').trim()
 }
 
-const getTempLabelFromName = (name: string) => {
+const getTempLabelFromName = (name: string): string | undefined => {
   const match = name.match(/\[(ร้อน|เย็น|ปั่น)\]/) || name.match(/\((ร้อน|เย็น|ปั่น)\)/)
-  return match ? match[1] : null
+  return match ? match[1] : undefined
 }
 
 // Persist the showImages preference
@@ -181,6 +181,55 @@ const toggleShowImages = () => {
     localStorage.setItem('pos:show-images', String(showImages.value))
   }
 }
+
+// Persist & restore filter selections (activeCategory, activeSubCategory, beverageTempFilter)
+// We restore AFTER categories & subCategories load so we can validate IDs still exist
+const restoreFiltersOnce = (cats: any[], subs: any[]) => {
+  if (!import.meta.client || cats.length === 0) return
+  const savedCat = localStorage.getItem('pos:active-category')
+  const savedSub = localStorage.getItem('pos:active-sub-category')
+  const savedTemp = localStorage.getItem('pos:beverage-temp-filter')
+
+  if (savedCat !== null) {
+    const parsed = savedCat === 'all' ? 'all' : Number(savedCat)
+    const valid = parsed === 'all' || cats.some((c: any) => c.id === parsed)
+    if (valid) activeCategory.value = parsed
+  }
+
+  if (savedSub !== null && subs.length > 0) {
+    const parsed = savedSub === 'all' ? 'all' : Number(savedSub)
+    const valid = parsed === 'all' || subs.some((s: any) => s.id === parsed)
+    if (valid) activeSubCategory.value = parsed
+  }
+
+  if (savedTemp === 'hot' || savedTemp === 'cold' || savedTemp === 'all') {
+    beverageTempFilter.value = savedTemp
+  }
+}
+
+// Watch for data ready, then restore once (use flag to avoid calling before init)
+let filtersRestored = false
+watch(
+  [categories, subCategories],
+  ([cats, subs]) => {
+    if (!filtersRestored && cats.length > 0) {
+      restoreFiltersOnce(cats, subs)
+      filtersRestored = true
+    }
+  },
+  { immediate: true }
+)
+
+// Persist filter changes to localStorage
+watch(activeCategory, (val) => {
+  if (import.meta.client) localStorage.setItem('pos:active-category', String(val))
+})
+watch(activeSubCategory, (val) => {
+  if (import.meta.client) localStorage.setItem('pos:active-sub-category', String(val))
+})
+watch(beverageTempFilter, (val) => {
+  if (import.meta.client) localStorage.setItem('pos:beverage-temp-filter', val)
+})
 
 // Drag & Drop State
 const draggedMenu = ref<any>(null)
@@ -336,6 +385,150 @@ const filteredMenus = computed(() => {
   }
   
   return list
+})
+
+// Grouped and sorted filtered menus for display grouping/zones
+const groupedFilteredMenus = computed(() => {
+  const menus = filteredMenus.value
+  
+  // If activeCategory is 'all'
+  if (activeCategory.value === 'all') {
+    const catGroupsMap = new Map<number, any>()
+    
+    // Initialize category groups in order of display_order
+    categories.value.forEach((cat: any) => {
+      catGroupsMap.set(cat.id, {
+        id: cat.id,
+        name: cat.name === 'Food' ? 'อาหาร' : cat.name === 'Beverage' ? 'เครื่องดื่ม' : cat.name === 'Dessert' ? 'ของหวาน' : cat.name,
+        icon: cat.icon,
+        display_order: cat.display_order,
+        subGroups: []
+      })
+    })
+    
+    // For each category, group its items by sub_category
+    categories.value.forEach((cat: any) => {
+      const catId = cat.id
+      const catItems = menus.filter(m => m.category_id === catId)
+      if (catItems.length === 0) return
+      
+      const catSubCats = subCategories.value.filter((s: any) => s.category_id === catId)
+      const subGroupsMap = new Map<number | 'none', any>()
+      
+      catSubCats.forEach((sub: any) => {
+        subGroupsMap.set(sub.id, {
+          id: sub.id,
+          name: sub.name,
+          display_order: sub.display_order,
+          items: []
+        })
+      })
+      
+      const noSubGroup = {
+        id: 'none',
+        name: 'ทั่วไป (อื่น ๆ)',
+        display_order: 9999,
+        items: []
+      }
+      
+      catItems.forEach((menu: any) => {
+        const subId = menu.sub_category_id
+        if (subId && subGroupsMap.has(subId)) {
+          subGroupsMap.get(subId).items.push(menu)
+        } else {
+          noSubGroup.items.push(menu)
+        }
+      })
+      
+      const subGroupsList = Array.from(subGroupsMap.values())
+      // Sort items alphabetically inside subcategories
+      subGroupsList.forEach(g => {
+        g.items.sort((a: any, b: any) => a.name.localeCompare(b.name, 'th'))
+      })
+      if (noSubGroup.items.length > 0) {
+        noSubGroup.items.sort((a: any, b: any) => a.name.localeCompare(b.name, 'th'))
+        subGroupsList.push(noSubGroup)
+      }
+      
+      const activeSubGroups = subGroupsList.filter(g => g.items.length > 0)
+      if (activeSubGroups.length > 0) {
+        catGroupsMap.get(catId).subGroups = activeSubGroups
+      }
+    })
+    
+    return Array.from(catGroupsMap.values()).filter(g => g.subGroups.length > 0)
+  }
+  
+  // If activeCategory is specific (e.g. Beverage, Food, etc.)
+  const isBeverageAll = activeCategory.value === beverageCategoryId.value && beverageTempFilter.value === 'all'
+  const subGroupsMap = new Map<number | 'none', any>()
+  
+  // Initialize sub-category groups in order of display_order
+  filteredSubCategories.value.forEach((sub: any) => {
+    subGroupsMap.set(sub.id, {
+      id: sub.id,
+      name: sub.name,
+      display_order: sub.display_order,
+      items: []
+    })
+  })
+  
+  const noSubGroup = {
+    id: 'none',
+    name: 'ทั่วไป (อื่น ๆ)',
+    display_order: 9999,
+    items: []
+  }
+  
+  menus.forEach((menu: any) => {
+    const subId = menu.sub_category_id
+    if (subId && subGroupsMap.has(subId)) {
+      subGroupsMap.get(subId).items.push(menu)
+    } else {
+      noSubGroup.items.push(menu)
+    }
+  })
+  
+  const subGroupsList = Array.from(subGroupsMap.values())
+  // Sort items alphabetically inside subcategories
+  subGroupsList.forEach(g => {
+    g.items.sort((a: any, b: any) => a.name.localeCompare(b.name, 'th'))
+  })
+  if (noSubGroup.items.length > 0) {
+    noSubGroup.items.sort((a: any, b: any) => a.name.localeCompare(b.name, 'th'))
+    subGroupsList.push(noSubGroup)
+  }
+  
+  // If viewing beverages with "all" temp filter, split each sub-group into hot/cold zones
+  if (isBeverageAll) {
+    subGroupsList.forEach(g => {
+      const coldItems = g.items.filter((m: any) => {
+        const opt = m.options?.find((o: any) => o.id === m.preSelectedTempOptionId)
+        return opt && opt.label === 'เย็น'
+      })
+      const hotItems = g.items.filter((m: any) => {
+        const opt = m.options?.find((o: any) => o.id === m.preSelectedTempOptionId)
+        return opt && opt.label === 'ร้อน'
+      })
+      const otherItems = g.items.filter((m: any) => {
+        if (!m.preSelectedTempOptionId) return true
+        const opt = m.options?.find((o: any) => o.id === m.preSelectedTempOptionId)
+        return !opt || (opt.label !== 'เย็น' && opt.label !== 'ร้อน')
+      })
+      const zones = []
+      if (coldItems.length > 0) zones.push({ label: 'เย็น', icon: '🧊', items: coldItems })
+      if (hotItems.length > 0) zones.push({ label: 'ร้อน', icon: '🔥', items: hotItems })
+      if (otherItems.length > 0) zones.push({ label: 'อื่น ๆ', icon: '☕', items: otherItems })
+      g.tempZones = zones.length > 0 ? zones : null
+    })
+  }
+  
+  // If the user selected a specific sub-category tab, only show that sub-category
+  if (activeSubCategory.value !== 'all') {
+    return subGroupsList.filter(g => g.id === activeSubCategory.value && g.items.length > 0)
+  }
+  
+  return subGroupsList.filter(g => g.items.length > 0)
 })
 
 // Group active options by option_group for rendering
@@ -1213,72 +1406,233 @@ const submitOrder = async () => {
             <p class="text-zinc-500 text-lg font-medium">ไม่พบเมนูที่ตรงกับเงื่อนไข</p>
           </div>
           
-          <div v-else class="grid gap-3" :class="showImages ? 'grid-cols-3 md:grid-cols-4 lg:grid-cols-5' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'">
-            <!-- Menus List -->
-            <button 
-              v-for="menu in filteredMenus" 
-              :key="menu.clientUniqueId"
-              draggable="true"
-              @dragstart="onDragStart($event, menu)"
-              @dragend="onDragEnd"
-              @click="selectMenu(menu)"
-              :class="`rounded-2xl border text-left flex active:scale-98 transition-all duration-100 cursor-grab active:cursor-grabbing ${
-                showImages ? 'flex-col overflow-hidden h-auto' : 'p-4 flex-col justify-between h-32'
-              } ${
-                selectedMenu?.clientUniqueId === menu.clientUniqueId
-                  ? 'border-orange-600 ring-2 ring-orange-600 bg-orange-50'
-                  : 'border-zinc-200 bg-white hover:bg-zinc-50'
-              }`"
-            >
-              <!-- Card Image (Shown ONLY if showImages is true) -->
-              <template v-if="showImages">
-                <div class="h-20 md:h-[86px] w-full bg-zinc-100 relative overflow-hidden flex-shrink-0">
-                  <img 
-                    v-if="menu.image_url" 
-                    :src="menu.image_url" 
-                    :alt="menu.name" 
-                    class="w-full h-full object-cover"
-                    loading="lazy"
-                    decoding="async"
-                  />
-                  <div v-else class="w-full h-full flex items-center justify-center text-2xl">
-                    {{ menu.dept === 'Kitchen' ? '🍜' : menu.dept === 'Barista' ? '☕' : '🍰' }}
-                  </div>
-                  <!-- Temperature badge overlaid on image (Minimalist circle) -->
-                  <div 
-                    v-if="getTempLabelFromName(menu.name)" 
-                    class="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-white/85 backdrop-blur-sm border border-zinc-200/30 flex items-center justify-center text-[10px] shadow-sm select-none"
-                    :title="getTempLabelFromName(menu.name)"
-                  >
-                    {{ getTempLabelFromName(menu.name) === 'เย็น' ? '🧊' : '🔥' }}
-                  </div>
+          <div v-else class="space-y-6">
+            <!-- Case 1: All categories view (nested groupings by category then sub-category) -->
+            <template v-if="activeCategory === 'all'">
+              <div v-for="catGroup in groupedFilteredMenus" :key="catGroup.id" class="space-y-4">
+                <!-- Category Section Banner -->
+                <div class="flex items-center gap-2 border-b border-zinc-200 pb-1.5 mt-2">
+                  <span class="text-xl">{{ catGroup.icon }}</span>
+                  <h2 class="text-base font-black text-zinc-800">{{ catGroup.name }}</h2>
                 </div>
                 
-                <!-- Card details -->
-                <div class="p-2 md:p-2.5 flex-1">
-                  <h3 class="font-bold text-zinc-900 text-xs md:text-sm leading-snug line-clamp-2">{{ getDisplayNameWithoutTemp(menu.name) }}</h3>
-                </div>
-              </template>
+                <!-- Subcategory Zones -->
+                <div v-for="subGroup in catGroup.subGroups" :key="subGroup.id" class="space-y-2 pl-2">
+                  <h3 class="text-[11px] font-black text-zinc-400 uppercase tracking-wider pl-1">
+                    📂 {{ subGroup.name }}
+                  </h3>
+                  
+                  <!-- Items Grid -->
+                  <div class="grid gap-3" :class="showImages ? 'grid-cols-3 md:grid-cols-4 lg:grid-cols-5' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'">
+                    <button 
+                      v-for="menu in subGroup.items" 
+                      :key="menu.clientUniqueId"
+                      draggable="true"
+                      @dragstart="onDragStart($event, menu)"
+                      @dragend="onDragEnd"
+                      @click="selectMenu(menu)"
+                      :class="`rounded-2xl border text-left flex active:scale-98 transition-all duration-100 cursor-grab active:cursor-grabbing ${
+                        showImages ? 'flex-col overflow-hidden h-auto' : 'p-4 flex-col justify-between h-32'
+                      } ${
+                        selectedMenu?.clientUniqueId === menu.clientUniqueId
+                          ? 'border-orange-600 ring-2 ring-orange-600 bg-orange-50'
+                          : 'border-zinc-200 bg-white hover:bg-zinc-50'
+                      }`"
+                    >
+                      <!-- Card Image -->
+                      <template v-if="showImages">
+                        <div class="h-20 md:h-[86px] w-full bg-zinc-100 relative overflow-hidden flex-shrink-0">
+                          <img 
+                            v-if="menu.image_url" 
+                            :src="menu.image_url" 
+                            :alt="menu.name" 
+                            class="w-full h-full object-cover"
+                            loading="lazy"
+                            decoding="async"
+                          />
+                          <div v-else class="w-full h-full flex items-center justify-center text-2xl">
+                            {{ menu.dept === 'Kitchen' ? '🍜' : menu.dept === 'Barista' ? '☕' : '🍰' }}
+                          </div>
+                          <!-- Temperature badge overlaid on image (Minimalist circle) -->
+                          <div 
+                            v-if="getTempLabelFromName(menu.name)" 
+                            class="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-white/85 backdrop-blur-sm border border-zinc-200/30 flex items-center justify-center text-[10px] shadow-sm select-none"
+                            :title="getTempLabelFromName(menu.name)"
+                          >
+                            {{ getTempLabelFromName(menu.name) === 'เย็น' ? '🧊' : '🔥' }}
+                          </div>
+                        </div>
+                        
+                        <!-- Card details -->
+                        <div class="p-2 md:p-2.5 flex-1">
+                          <h3 class="font-bold text-zinc-900 text-xs md:text-sm leading-snug line-clamp-2">{{ getDisplayNameWithoutTemp(menu.name) }}</h3>
+                        </div>
+                      </template>
 
-              <!-- Text/Emoji Card layout (Shown when showImages is false) -->
-              <template v-else>
-                <div class="flex justify-between items-start w-full">
-                  <span class="text-2xl">{{ menu.dept === 'Kitchen' ? '🍜' : menu.dept === 'Barista' ? '☕' : '🍰' }}</span>
-                  <!-- Temperature badge in text layout (Minimalist circle) -->
-                  <div 
-                    v-if="getTempLabelFromName(menu.name)" 
-                    class="w-6 h-6 rounded-full bg-zinc-100 border border-zinc-200 flex items-center justify-center text-[10px] shadow-sm select-none"
-                    :title="getTempLabelFromName(menu.name)"
-                  >
-                    {{ getTempLabelFromName(menu.name) === 'เย็น' ? '🧊' : '🔥' }}
+                      <!-- Text/Emoji Card layout -->
+                      <template v-else>
+                        <div class="flex justify-between items-start w-full">
+                          <span class="text-2xl">{{ menu.dept === 'Kitchen' ? '🍜' : menu.dept === 'Barista' ? '☕' : '🍰' }}</span>
+                          <!-- Temperature badge in text layout (Minimalist circle) -->
+                          <div 
+                            v-if="getTempLabelFromName(menu.name)" 
+                            class="w-6 h-6 rounded-full bg-zinc-100 border border-zinc-200 flex items-center justify-center text-[10px] shadow-sm select-none"
+                            :title="getTempLabelFromName(menu.name)"
+                          >
+                            {{ getTempLabelFromName(menu.name) === 'เย็น' ? '🧊' : '🔥' }}
+                          </div>
+                        </div>
+                        
+                        <div class="mt-2">
+                          <h3 class="font-bold text-zinc-900 text-xs md:text-sm leading-snug line-clamp-2 font-sans">{{ getDisplayNameWithoutTemp(menu.name) }}</h3>
+                        </div>
+                      </template>
+                    </button>
                   </div>
                 </div>
-                
-                <div class="mt-2">
-                  <h3 class="font-bold text-zinc-900 text-xs md:text-sm leading-snug line-clamp-2 font-sans">{{ getDisplayNameWithoutTemp(menu.name) }}</h3>
-                </div>
-              </template>
-            </button>
+              </div>
+            </template>
+
+            <!-- Case 2: Specific category view (flat sub-category groups) -->
+            <template v-else>
+              <div v-for="subGroup in groupedFilteredMenus" :key="subGroup.id" class="space-y-3.5">
+                <!-- Subcategory Zone Heading (only visible when filtering 'All' sub-categories) -->
+                <h3 v-if="activeSubCategory === 'all'" class="text-xs font-black text-zinc-400 uppercase tracking-wider pl-1 mt-2.5">
+                  📂 {{ subGroup.name }}
+                </h3>
+
+                <!-- BEVERAGE ALL TEMP: split into Hot / Cold zones -->
+                <template v-if="subGroup.tempZones">
+                  <div v-for="zone in subGroup.tempZones" :key="zone.label" class="space-y-2">
+                    <!-- Temp zone header -->
+                    <div class="flex items-center gap-1.5 px-1 py-0.5">
+                      <span class="text-sm">{{ zone.icon }}</span>
+                      <span :class="`text-[11px] font-black uppercase tracking-wider ${
+                        zone.label === 'เย็น' ? 'text-blue-500' : zone.label === 'ร้อน' ? 'text-orange-500' : 'text-zinc-400'
+                      }`">{{ zone.label }}</span>
+                      <div :class="`flex-1 h-px ${
+                        zone.label === 'เย็น' ? 'bg-blue-100' : zone.label === 'ร้อน' ? 'bg-orange-100' : 'bg-zinc-200'
+                      }`"></div>
+                    </div>
+
+                    <!-- Items Grid (temp zone) -->
+                    <div class="grid gap-3" :class="showImages ? 'grid-cols-3 md:grid-cols-4 lg:grid-cols-5' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'">
+                      <button 
+                        v-for="menu in zone.items" 
+                        :key="menu.clientUniqueId"
+                        draggable="true"
+                        @dragstart="onDragStart($event, menu)"
+                        @dragend="onDragEnd"
+                        @click="selectMenu(menu)"
+                        :class="`rounded-2xl border text-left flex active:scale-98 transition-all duration-100 cursor-grab active:cursor-grabbing ${
+                          showImages ? 'flex-col overflow-hidden h-auto' : 'p-4 flex-col justify-between h-32'
+                        } ${
+                          selectedMenu?.clientUniqueId === menu.clientUniqueId
+                            ? 'border-orange-600 ring-2 ring-orange-600 bg-orange-50'
+                            : 'border-zinc-200 bg-white hover:bg-zinc-50'
+                        }`"
+                      >
+                        <template v-if="showImages">
+                          <div class="h-20 md:h-[86px] w-full bg-zinc-100 relative overflow-hidden flex-shrink-0">
+                            <img v-if="menu.image_url" :src="menu.image_url" :alt="menu.name" class="w-full h-full object-cover" loading="lazy" decoding="async" />
+                            <div v-else class="w-full h-full flex items-center justify-center text-2xl">
+                              {{ menu.dept === 'Kitchen' ? '🍜' : menu.dept === 'Barista' ? '☕' : '🍰' }}
+                            </div>
+                            <div v-if="getTempLabelFromName(menu.name)" class="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-white/85 backdrop-blur-sm border border-zinc-200/30 flex items-center justify-center text-[10px] shadow-sm select-none" :title="getTempLabelFromName(menu.name)">
+                              {{ getTempLabelFromName(menu.name) === 'เย็น' ? '🧊' : '🔥' }}
+                            </div>
+                          </div>
+                          <div class="p-2 md:p-2.5 flex-1">
+                            <h3 class="font-bold text-zinc-900 text-xs md:text-sm leading-snug line-clamp-2">{{ getDisplayNameWithoutTemp(menu.name) }}</h3>
+                          </div>
+                        </template>
+                        <template v-else>
+                          <div class="flex justify-between items-start w-full">
+                            <span class="text-2xl">{{ menu.dept === 'Kitchen' ? '🍜' : menu.dept === 'Barista' ? '☕' : '🍰' }}</span>
+                            <div v-if="getTempLabelFromName(menu.name)" class="w-6 h-6 rounded-full bg-zinc-100 border border-zinc-200 flex items-center justify-center text-[10px] shadow-sm select-none" :title="getTempLabelFromName(menu.name)">
+                              {{ getTempLabelFromName(menu.name) === 'เย็น' ? '🧊' : '🔥' }}
+                            </div>
+                          </div>
+                          <div class="mt-2">
+                            <h3 class="font-bold text-zinc-900 text-xs md:text-sm leading-snug line-clamp-2 font-sans">{{ getDisplayNameWithoutTemp(menu.name) }}</h3>
+                          </div>
+                        </template>
+                      </button>
+                    </div>
+                  </div>
+                </template>
+
+                <!-- NORMAL (no temp split): flat items grid -->
+                <template v-else>
+                  <div class="grid gap-3" :class="showImages ? 'grid-cols-3 md:grid-cols-4 lg:grid-cols-5' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'">
+                    <button 
+                      v-for="menu in subGroup.items" 
+                      :key="menu.clientUniqueId"
+                      draggable="true"
+                      @dragstart="onDragStart($event, menu)"
+                      @dragend="onDragEnd"
+                      @click="selectMenu(menu)"
+                      :class="`rounded-2xl border text-left flex active:scale-98 transition-all duration-100 cursor-grab active:cursor-grabbing ${
+                        showImages ? 'flex-col overflow-hidden h-auto' : 'p-4 flex-col justify-between h-32'
+                      } ${
+                        selectedMenu?.clientUniqueId === menu.clientUniqueId
+                          ? 'border-orange-600 ring-2 ring-orange-600 bg-orange-50'
+                          : 'border-zinc-200 bg-white hover:bg-zinc-50'
+                      }`"
+                    >
+                      <!-- Card Image -->
+                      <template v-if="showImages">
+                        <div class="h-20 md:h-[86px] w-full bg-zinc-100 relative overflow-hidden flex-shrink-0">
+                          <img 
+                            v-if="menu.image_url" 
+                            :src="menu.image_url" 
+                            :alt="menu.name" 
+                            class="w-full h-full object-cover"
+                            loading="lazy"
+                            decoding="async"
+                          />
+                          <div v-else class="w-full h-full flex items-center justify-center text-2xl">
+                            {{ menu.dept === 'Kitchen' ? '🍜' : menu.dept === 'Barista' ? '☕' : '🍰' }}
+                          </div>
+                          <!-- Temperature badge overlaid on image (Minimalist circle) -->
+                          <div 
+                            v-if="getTempLabelFromName(menu.name)" 
+                            class="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-white/85 backdrop-blur-sm border border-zinc-200/30 flex items-center justify-center text-[10px] shadow-sm select-none"
+                            :title="getTempLabelFromName(menu.name)"
+                          >
+                            {{ getTempLabelFromName(menu.name) === 'เย็น' ? '🧊' : '🔥' }}
+                          </div>
+                        </div>
+                        
+                        <!-- Card details -->
+                        <div class="p-2 md:p-2.5 flex-1">
+                          <h3 class="font-bold text-zinc-900 text-xs md:text-sm leading-snug line-clamp-2">{{ getDisplayNameWithoutTemp(menu.name) }}</h3>
+                        </div>
+                      </template>
+
+                      <!-- Text/Emoji Card layout -->
+                      <template v-else>
+                        <div class="flex justify-between items-start w-full">
+                          <span class="text-2xl">{{ menu.dept === 'Kitchen' ? '🍜' : menu.dept === 'Barista' ? '☕' : '🍰' }}</span>
+                          <!-- Temperature badge in text layout (Minimalist circle) -->
+                          <div 
+                            v-if="getTempLabelFromName(menu.name)" 
+                            class="w-6 h-6 rounded-full bg-zinc-100 border border-zinc-200 flex items-center justify-center text-[10px] shadow-sm select-none"
+                            :title="getTempLabelFromName(menu.name)"
+                          >
+                            {{ getTempLabelFromName(menu.name) === 'เย็น' ? '🧊' : '🔥' }}
+                          </div>
+                        </div>
+                        
+                        <div class="mt-2">
+                          <h3 class="font-bold text-zinc-900 text-xs md:text-sm leading-snug line-clamp-2 font-sans">{{ getDisplayNameWithoutTemp(menu.name) }}</h3>
+                        </div>
+                      </template>
+                    </button>
+                  </div>
+                </template>
+              </div>
+            </template>
           </div>
         </div>
       </main>
