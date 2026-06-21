@@ -157,6 +157,16 @@ const getFilteredOptions = (item: any) => {
   })
 }
 
+// Helpers for temperature badge rendering on card
+const getDisplayNameWithoutTemp = (name: string) => {
+  return name.replace(/\s*\[(ร้อน|เย็น|ปั่น)\]/g, '').replace(/\s*\((ร้อน|เย็น|ปั่น)\)/g, '').trim()
+}
+
+const getTempLabelFromName = (name: string) => {
+  const match = name.match(/\[(ร้อน|เย็น|ปั่น)\]/) || name.match(/\((ร้อน|เย็น|ปั่น)\)/)
+  return match ? match[1] : null
+}
+
 // Persist the showImages preference
 if (import.meta.client) {
   const savedVal = localStorage.getItem('pos:show-images')
@@ -1234,11 +1244,23 @@ const submitOrder = async () => {
                   <div v-else class="w-full h-full flex items-center justify-center text-2xl">
                     {{ menu.dept === 'Kitchen' ? '🍜' : menu.dept === 'Barista' ? '☕' : '🍰' }}
                   </div>
+                  <!-- Temperature badge overlaid on image -->
+                  <div 
+                    v-if="getTempLabelFromName(menu.name)" 
+                    :class="`absolute top-1.5 left-1.5 px-2 py-0.5 rounded-lg text-[9px] font-black uppercase flex items-center gap-1 shadow-sm ${
+                      getTempLabelFromName(menu.name) === 'เย็น' 
+                        ? 'bg-blue-600/90 text-white' 
+                        : 'bg-red-600/90 text-white'
+                    }`"
+                  >
+                    <span>{{ getTempLabelFromName(menu.name) === 'เย็น' ? '🧊' : '🔥' }}</span>
+                    <span>{{ getTempLabelFromName(menu.name) }}</span>
+                  </div>
                 </div>
                 
                 <!-- Card details -->
                 <div class="p-2 md:p-2.5 flex-1">
-                  <h3 class="font-bold text-zinc-900 text-xs md:text-sm leading-snug line-clamp-2">{{ menu.name }}</h3>
+                  <h3 class="font-bold text-zinc-900 text-xs md:text-sm leading-snug line-clamp-2">{{ getDisplayNameWithoutTemp(menu.name) }}</h3>
                 </div>
               </template>
 
@@ -1246,10 +1268,22 @@ const submitOrder = async () => {
               <template v-else>
                 <div class="flex justify-between items-start w-full">
                   <span class="text-2xl">{{ menu.dept === 'Kitchen' ? '🍜' : menu.dept === 'Barista' ? '☕' : '🍰' }}</span>
+                  <!-- Temperature badge in text layout -->
+                  <div 
+                    v-if="getTempLabelFromName(menu.name)" 
+                    :class="`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase flex items-center gap-1 shadow-sm ${
+                      getTempLabelFromName(menu.name) === 'เย็น' 
+                        ? 'bg-blue-600/90 text-white' 
+                        : 'bg-red-600/90 text-white'
+                    }`"
+                  >
+                    <span>{{ getTempLabelFromName(menu.name) === 'เย็น' ? '🧊' : '🔥' }}</span>
+                    <span>{{ getTempLabelFromName(menu.name) }}</span>
+                  </div>
                 </div>
                 
                 <div class="mt-2">
-                  <h3 class="font-bold text-zinc-900 text-xs md:text-sm leading-snug line-clamp-2 font-sans">{{ menu.name }}</h3>
+                  <h3 class="font-bold text-zinc-900 text-xs md:text-sm leading-snug line-clamp-2 font-sans">{{ getDisplayNameWithoutTemp(menu.name) }}</h3>
                 </div>
               </template>
             </button>
