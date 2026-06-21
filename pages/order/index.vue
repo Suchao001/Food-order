@@ -119,6 +119,44 @@ watch(subCategories, (newSubs) => {
   }
 }, { immediate: true })
 
+// Helper to format menu name for beverages by appending selected temperature (e.g. ชาไทย [เย็น])
+const getFormattedMenuName = (item: any) => {
+  const menuName = item.menuName || item.menu_name || 'รายการ'
+  const options = item.selectedOptions || item.options || []
+  const menuId = item.menuId || item.menu_id
+  const categoryId = item.categoryId || item.category_id
+  
+  const isBev = categoryId === beverageCategoryId.value || (allMenus.value.find(m => m.id === menuId)?.dept === 'Barista')
+  if (isBev) {
+    const tempOpt = options.find((o: any) => o.label === 'ร้อน' || o.label === 'เย็น' || o.label === 'ปั่น')
+    if (tempOpt) {
+      const baseName = menuName.replace(/\s*\[(ร้อน|เย็น|ปั่น)\]/g, '').replace(/\s*\((ร้อน|เย็น|ปั่น)\)/g, '').trim()
+      return `${baseName} [${tempOpt.label}]`
+    }
+  }
+  return menuName
+}
+
+// Helper to filter options (omit temperature options and 'หวานปกติ' or 'หวานปกติ (100%)' etc.)
+const getFilteredOptions = (item: any) => {
+  const options = item.selectedOptions || item.options || []
+  const menuId = item.menuId || item.menu_id
+  const categoryId = item.categoryId || item.category_id
+  
+  return options.filter((opt: any) => {
+    // 1. Hide temperature options for beverages (since it's appended to menu name)
+    const isBev = categoryId === beverageCategoryId.value || (allMenus.value.find(m => m.id === menuId)?.dept === 'Barista')
+    if (isBev && (opt.label === 'ร้อน' || opt.label === 'เย็น' || opt.label === 'ปั่น')) {
+      return false
+    }
+    // 2. Hide "หวานปกติ" or "หวานปกติ (100%)" or containing "หวานปกติ"
+    if (opt.label && opt.label.includes('หวานปกติ')) {
+      return false
+    }
+    return true
+  })
+}
+
 // Persist the showImages preference
 if (import.meta.client) {
   const savedVal = localStorage.getItem('pos:show-images')
@@ -1484,7 +1522,7 @@ const submitOrder = async () => {
                   : 'border-transparent text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100'
               }`"
             >
-              <span>🛒 ตะกร้าสินค้า</span>
+              <span>🛒 รายการที่สั่ง</span>
               <span v-if="cart.length > 0" class="px-1.5 py-0.5 text-[10px] bg-orange-600 text-white rounded-full">
                 {{ cartTotalItems }}
               </span>
@@ -1544,7 +1582,7 @@ const submitOrder = async () => {
                     <!-- Name & Price on same line -->
                     <div class="flex items-baseline justify-between w-full">
                       <div class="flex items-baseline gap-1.5 min-w-0 flex-1">
-                        <span class="font-black text-zinc-900 text-sm truncate">{{ item.menuName }}</span>
+                        <span class="font-black text-zinc-900 text-sm truncate">{{ getFormattedMenuName(item) }}</span>
                         <span class="text-xs text-zinc-400 font-medium">x{{ item.quantity }}</span>
                       </div>
                       <span class="font-black text-zinc-900 text-sm ml-2 flex-shrink-0">฿{{ item.totalPrice * item.quantity }}</span>
@@ -1557,7 +1595,7 @@ const submitOrder = async () => {
                         <span v-if="item.proteinType && item.proteinType !== ''" class="font-bold text-zinc-650">
                           • {{ item.proteinType }}{{ item.isSpecial ? ' (พิเศษ)' : '' }}
                         </span>
-                        <span v-for="opt in item.selectedOptions" :key="opt.optionId">
+                        <span v-for="opt in getFilteredOptions(item)" :key="opt.optionId">
                           + {{ opt.label }}
                         </span>
                         <span v-if="item.discount > 0" class="text-green-600 font-bold">
@@ -1691,13 +1729,13 @@ const submitOrder = async () => {
                 <!-- Order Items list -->
                 <div class="text-xs text-zinc-700 space-y-1.5 pl-1 py-2 border-t border-b border-zinc-200 my-2 font-sans">
                   <div v-for="item in order.items" :key="item.id" class="leading-relaxed">
-                    <span class="font-bold text-zinc-900">{{ item.menu_name }}</span>
+                    <span class="font-bold text-zinc-900">{{ getFormattedMenuName(item) }}</span>
                     <span class="text-zinc-505 font-bold ml-1">x{{ item.quantity }}</span>
                     <div class="pl-2 text-[10px] text-zinc-505 font-sans flex flex-wrap gap-1 mt-0.5">
                       <span v-if="item.protein_type && item.menu_dept === 'Kitchen'" class="bg-zinc-100 text-zinc-700 px-1.5 py-0.5 rounded text-[9px] font-semibold">
                         {{ item.protein_type }}{{ item.is_special ? ' (พิเศษ)' : '' }}{{ item.is_takeaway ? ' (กล่อง)' : '' }}
                       </span>
-                      <span v-for="opt in item.options" :key="opt.option_id" class="bg-orange-50 text-orange-700 px-1.5 py-0.5 rounded text-[9px] font-semibold border border-orange-200">
+                      <span v-for="opt in getFilteredOptions(item)" :key="opt.option_id" class="bg-orange-50 text-orange-700 px-1.5 py-0.5 rounded text-[9px] font-semibold border border-orange-200">
                         + {{ opt.label }}
                       </span>
                       <span v-if="item.notes" class="text-zinc-505 italic block w-full">
@@ -1771,25 +1809,25 @@ const submitOrder = async () => {
               <div v-for="group in groupedReceiptData" :key="group.category.id || 'unknown'">
                 <!-- Category Heading inside thermal preview -->
                 <div class="text-[10px] font-black text-zinc-500 border-b border-dashed border-zinc-300 pb-0.5 mb-1.5">
-                  {{ group.category.icon }} {{ group.category.name === 'Food' ? 'อาหาร' : group.category.name === 'Beverage' ? 'เครื่องดื่ม' : group.category.name === 'Dessert' ? 'ของหวาน' : group.category.name }}
+                  {{ group.category.name === 'Food' ? 'อาหาร' : group.category.name === 'Beverage' ? 'เครื่องดื่ม' : group.category.name === 'Dessert' ? 'ของหวาน' : group.category.name }}
                 </div>
                 
                 <!-- Items in category -->
                 <div v-for="(item, idx) in group.items" :key="idx" class="mb-2">
                   <div class="flex justify-between font-bold">
-                    <span class="w-[60%] truncate">{{ item.menuName }}</span>
+                    <span class="w-[60%] truncate">{{ getFormattedMenuName(item) }}</span>
                     <span class="w-[15%] text-center">x{{ item.quantity }}</span>
                     <span class="w-[25%] text-right">฿{{ item.totalPrice * item.quantity }}</span>
                   </div>
                   <div class="pl-2 text-[10px] text-zinc-650 font-mono">
                     <span v-if="item.proteinType && item.proteinType !== ''">{{ item.proteinType }}{{ item.isSpecial ? ' (พิเศษ)' : '' }}</span>
-                    <div v-for="opt in item.selectedOptions" :key="opt.optionId">
+                    <div v-for="opt in getFilteredOptions(item)" :key="opt.optionId">
                       + {{ opt.label }}
                     </div>
                     <div v-if="item.discount > 0" class="text-green-600 font-bold">
-                      💸 ส่วนลด -฿{{ item.discount }}
+                      ส่วนลด -฿{{ item.discount }}
                     </div>
-                    <div v-if="item.notes" class="italic font-sans">📝 {{ item.notes }}</div>
+                    <div v-if="item.notes" class="italic font-sans">หมายเหตุ: {{ item.notes }}</div>
                   </div>
                 </div>
               </div>
@@ -1803,7 +1841,7 @@ const submitOrder = async () => {
             </div>
             
             <div class="text-center text-[10px] text-slate-500 mt-4">
-              🙏 ขอบคุณที่ใช้บริการค่ะ / Thank you 🙏
+              ขอบคุณที่ใช้บริการค่ะ / Thank you
             </div>
           </div>
           
@@ -1850,23 +1888,23 @@ const submitOrder = async () => {
         <div v-for="group in groupedReceiptData" :key="group.category.id || 'unknown'" class="text-xs">
           <!-- Category Header -->
           <div class="font-bold border-b border-black pb-0.5 mt-2 mb-1">
-            {{ group.category.icon }} {{ group.category.name === 'Food' ? 'อาหาร' : group.category.name === 'Beverage' ? 'เครื่องดื่ม' : group.category.name === 'Dessert' ? 'ของหวาน' : group.category.name }}
+            {{ group.category.name === 'Food' ? 'อาหาร' : group.category.name === 'Beverage' ? 'เครื่องดื่ม' : group.category.name === 'Dessert' ? 'ของหวาน' : group.category.name }}
           </div>
           <div v-for="(item, idx) in group.items" :key="idx" class="mb-1">
             <div class="flex justify-between">
-              <span class="w-[60%] font-bold">{{ item.menuName }}</span>
+              <span class="w-[60%] font-bold">{{ getFormattedMenuName(item) }}</span>
               <span class="w-[15%] text-center">x{{ item.quantity }}</span>
               <span class="w-[25%] text-right">฿{{ item.totalPrice * item.quantity }}</span>
             </div>
             <div class="pl-2 text-[10px] text-gray-800">
               <span v-if="item.proteinType && item.proteinType !== ''">{{ item.proteinType }}{{ item.isSpecial ? ' (พิเศษ)' : '' }}</span>
-              <div v-for="opt in item.selectedOptions" :key="opt.optionId">
+              <div v-for="opt in getFilteredOptions(item)" :key="opt.optionId">
                 + {{ opt.label }}
               </div>
               <div v-if="item.discount > 0" class="font-bold">
-                💸 ส่วนลด -฿{{ item.discount }}
+                ส่วนลด -฿{{ item.discount }}
               </div>
-              <div v-if="item.notes" class="italic">📝 {{ item.notes }}</div>
+              <div v-if="item.notes" class="italic">หมายเหตุ: {{ item.notes }}</div>
             </div>
           </div>
         </div>
@@ -1879,7 +1917,7 @@ const submitOrder = async () => {
         </div>
         
         <div class="h-6"></div>
-        <div class="text-center text-xs font-bold">🙏 ขอบคุณที่ใช้บริการค่ะ 🙏</div>
+        <div class="text-center text-xs font-bold">ขอบคุณที่ใช้บริการค่ะ</div>
       </div>
     </div>
 
