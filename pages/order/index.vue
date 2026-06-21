@@ -236,6 +236,15 @@ const draggedMenu = ref<any>(null)
 const isDraggingOverCart = ref(false)
 let dragCounter = 0
 
+// Touch drag state
+const cartPanelRef = ref<HTMLElement | null>(null)
+let touchGhost: HTMLElement | null = null
+let touchDragMenu: any = null
+let touchStartX = 0
+let touchStartY = 0
+let touchHasMoved = false
+const isTouchDragging = ref(false)
+
 // Active item configuration (Modifier Panel)
 const selectedMenu = ref<any>(null)
 const activeItemOptions = ref<any[]>([])
@@ -925,6 +934,79 @@ const onDrop = (e: DragEvent) => {
   }
 }
 
+// ─── Touch Drag & Drop (Android / iOS) ───────────────────────────────────────
+const onTouchStart = (e: TouchEvent, menu: any) => {
+  const touch = e.touches[0]
+  touchStartX = touch.clientX
+  touchStartY = touch.clientY
+  touchHasMoved = false
+  touchDragMenu = menu
+}
+
+const onTouchMove = (e: TouchEvent) => {
+  if (!touchDragMenu) return
+  const touch = e.touches[0]
+  const dx = touch.clientX - touchStartX
+  const dy = touch.clientY - touchStartY
+
+  // Start drag only after moving > 8px (avoids triggering on tap/scroll)
+  if (!touchHasMoved && Math.sqrt(dx * dx + dy * dy) < 8) return
+  
+  e.preventDefault() // prevent page scroll while dragging
+  touchHasMoved = true
+  isTouchDragging.value = true
+
+  // Create ghost element on first move
+  if (!touchGhost) {
+    const sourceEl = e.currentTarget as HTMLElement
+    touchGhost = sourceEl.cloneNode(true) as HTMLElement
+    touchGhost.style.cssText = `
+      position: fixed;
+      pointer-events: none;
+      z-index: 9999;
+      opacity: 0.85;
+      transform: scale(1.05) rotate(2deg);
+      transition: none;
+      width: ${sourceEl.offsetWidth}px;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.25);
+      border-radius: 16px;
+    `
+    document.body.appendChild(touchGhost)
+  }
+
+  touchGhost.style.left = `${touch.clientX - (touchGhost.offsetWidth / 2)}px`
+  touchGhost.style.top = `${touch.clientY - 30}px`
+
+  // Check if finger is over cart panel
+  const cartEl = cartPanelRef.value
+  if (cartEl) {
+    const rect = cartEl.getBoundingClientRect()
+    const overCart = touch.clientX >= rect.left && touch.clientX <= rect.right
+      && touch.clientY >= rect.top && touch.clientY <= rect.bottom
+    isDraggingOverCart.value = overCart
+  }
+}
+
+const onTouchEnd = (e: TouchEvent) => {
+  // Clean up ghost
+  if (touchGhost) {
+    touchGhost.remove()
+    touchGhost = null
+  }
+  isTouchDragging.value = false
+
+  if (touchHasMoved && touchDragMenu && isDraggingOverCart.value) {
+    addMenuToCartDirectly(touchDragMenu)
+    selectedMenu.value = null
+    activeTab.value = 'cart'
+    playAddSound()
+  }
+
+  isDraggingOverCart.value = false
+  touchDragMenu = null
+  touchHasMoved = false
+}
+
 const addQuickNote = (note: string) => {
   if (notes.value) {
     notes.value += ', ' + note
@@ -1430,6 +1512,9 @@ const submitOrder = async () => {
                       draggable="true"
                       @dragstart="onDragStart($event, menu)"
                       @dragend="onDragEnd"
+                      @touchstart="onTouchStart($event, menu)"
+                      @touchmove="onTouchMove"
+                      @touchend="onTouchEnd"
                       @click="selectMenu(menu)"
                       :class="`rounded-2xl border text-left flex active:scale-98 transition-all duration-100 cursor-grab active:cursor-grabbing ${
                         showImages ? 'flex-col overflow-hidden h-auto' : 'p-4 flex-col justify-between h-32'
@@ -1523,6 +1608,9 @@ const submitOrder = async () => {
                         draggable="true"
                         @dragstart="onDragStart($event, menu)"
                         @dragend="onDragEnd"
+                        @touchstart="onTouchStart($event, menu)"
+                        @touchmove="onTouchMove"
+                        @touchend="onTouchEnd"
                         @click="selectMenu(menu)"
                         :class="`rounded-2xl border text-left flex active:scale-98 transition-all duration-100 cursor-grab active:cursor-grabbing ${
                           showImages ? 'flex-col overflow-hidden h-auto' : 'p-4 flex-col justify-between h-32'
@@ -1571,6 +1659,9 @@ const submitOrder = async () => {
                       draggable="true"
                       @dragstart="onDragStart($event, menu)"
                       @dragend="onDragEnd"
+                      @touchstart="onTouchStart($event, menu)"
+                      @touchmove="onTouchMove"
+                      @touchend="onTouchEnd"
                       @click="selectMenu(menu)"
                       :class="`rounded-2xl border text-left flex active:scale-98 transition-all duration-100 cursor-grab active:cursor-grabbing ${
                         showImages ? 'flex-col overflow-hidden h-auto' : 'p-4 flex-col justify-between h-32'
@@ -1639,6 +1730,7 @@ const submitOrder = async () => {
 
       <!-- RIGHT PANEL: 35% width (100% in portrait) -->
       <aside 
+        ref="cartPanelRef"
         class="w-[35%] portrait:w-full portrait:h-[40%] bg-zinc-100 flex flex-col overflow-hidden min-h-0 relative transition-all duration-200"
         :class="{ 'ring-4 ring-orange-500 ring-inset bg-orange-50/10': isDraggingOverCart }"
         @dragover.prevent="onDragOver"
