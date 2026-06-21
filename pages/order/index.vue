@@ -1045,7 +1045,7 @@ const submitOrder = async () => {
             <p class="text-zinc-500 text-lg font-medium">ไม่พบเมนูที่ตรงกับเงื่อนไข</p>
           </div>
           
-          <div v-else class="grid gap-3.5" :class="showImages ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'">
+          <div v-else class="grid gap-3" :class="showImages ? 'grid-cols-3 md:grid-cols-4 lg:grid-cols-5' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'">
             <!-- Menus List -->
             <button 
               v-for="menu in filteredMenus" 
@@ -1064,7 +1064,7 @@ const submitOrder = async () => {
             >
               <!-- Card Image (Shown ONLY if showImages is true) -->
               <template v-if="showImages">
-                <div class="h-28 w-full bg-zinc-100 relative overflow-hidden">
+                <div class="h-20 md:h-[86px] w-full bg-zinc-100 relative overflow-hidden flex-shrink-0">
                   <img 
                     v-if="menu.image_url" 
                     :src="menu.image_url" 
@@ -1073,12 +1073,12 @@ const submitOrder = async () => {
                     loading="lazy"
                     decoding="async"
                   />
-                  <div v-else class="w-full h-full flex items-center justify-center text-4xl">
+                  <div v-else class="w-full h-full flex items-center justify-center text-2xl">
                     {{ menu.dept === 'Kitchen' ? '🍜' : menu.dept === 'Barista' ? '☕' : '🍰' }}
                   </div>
                   
                   <!-- Department badge overlay -->
-                  <span :class="`absolute top-2 right-2 text-[10px] uppercase font-black px-2 py-0.5 rounded shadow ${
+                  <span :class="`absolute top-1.5 right-1.5 text-[9px] uppercase font-black px-1.5 py-0.5 rounded shadow ${
                     menu.dept === 'Kitchen' ? 'bg-orange-600 text-white' :
                     menu.dept === 'Barista' ? 'bg-blue-600 text-white' :
                     'bg-pink-600 text-white'
@@ -1088,9 +1088,9 @@ const submitOrder = async () => {
                 </div>
                 
                 <!-- Card details -->
-                <div class="p-3 flex-1 flex flex-col justify-between">
-                  <h3 class="font-bold text-zinc-900 text-sm md:text-base leading-snug line-clamp-2">{{ menu.name }}</h3>
-                  <span class="text-orange-600 font-extrabold text-base mt-1 block">฿{{ menu.base_price }}</span>
+                <div class="p-2 md:p-2.5 flex-1 flex flex-col justify-between">
+                  <h3 class="font-bold text-zinc-900 text-xs md:text-sm leading-snug line-clamp-2">{{ menu.name }}</h3>
+                  <span class="text-orange-600 font-extrabold text-sm md:text-base mt-0.5 block">฿{{ menu.base_price }}</span>
                 </div>
               </template>
 
