@@ -123,10 +123,7 @@ async function handleFileUpload(event: Event) {
 }
 
 async function handleSubmit() {
-  if (!form.image_url) {
-    message.value = { type: 'error', text: 'Please upload an image first' }
-    return
-  }
+
 
   loading.value = true
   message.value = { type: '', text: '' }
@@ -137,7 +134,7 @@ async function handleSubmit() {
       body: {
         name: form.name,
         base_price: Number(form.base_price),
-        image_url: form.image_url,
+        image_url: form.image_url || null,
         category_id: form.category_id ? Number(form.category_id) : null,
         sub_category_id: form.sub_category_id ? Number(form.sub_category_id) : null,
         dept: form.dept,
@@ -305,7 +302,7 @@ async function handleDelete() {
                   @click="form.image_url = ''; if(fileInput) fileInput.value = ''"
                   class="bg-white text-red-600 px-3 py-1.5 rounded-md text-sm font-medium hover:bg-gray-100 transition-colors"
                 >
-                  Change Image
+                  🗑️ ลบรูปภาพ / อัปโหลดใหม่
                 </button>
              </div>
           </div>
@@ -350,7 +347,7 @@ async function handleDelete() {
       <!-- Submit Button -->
       <button 
         type="submit" 
-        :disabled="loading || uploading || !form.image_url"
+        :disabled="loading || uploading"
         class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-lg shadow-lg hover:shadow-xl transition-all transform active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
       >
         <span v-if="loading" class="flex items-center justify-center gap-2">

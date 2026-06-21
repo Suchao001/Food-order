@@ -42,7 +42,10 @@ const menus = computed(() => result.value?.data || [])
     <div v-else class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       <div v-for="menu in menus" :key="menu.id" class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow">
         <div class="aspect-video bg-gray-100 relative group">
-          <img :src="menu.image_url" :alt="menu.name" class="w-full h-full object-cover">
+          <img v-if="menu.image_url" :src="menu.image_url" :alt="menu.name" class="w-full h-full object-cover">
+          <div v-else class="w-full h-full flex items-center justify-center bg-zinc-50 text-4xl select-none">
+            {{ menu.dept === 'Kitchen' ? '🍜' : menu.dept === 'Barista' ? '☕' : '🍰' }}
+          </div>
           <div class="absolute top-3 right-3 bg-white/90 backdrop-blur px-3 py-1.5 rounded-full text-sm font-bold text-emerald-700 shadow-sm">
             ฿{{ menu.base_price }}
           </div>

@@ -4,17 +4,17 @@ export default defineEventHandler(async (event) => {
     const body = await readBody(event);
     const { name, image_url, base_price, category_id, sub_category_id, dept, optionIds } = body;
 
-    if (!name || !image_url || base_price === undefined) {
+    if (!name || base_price === undefined) {
         throw createError({
             statusCode: 400,
-            statusMessage: 'Missing required fields: name, image_url, base_price',
+            statusMessage: 'Missing required fields: name, base_price',
         });
     }
 
     try {
         const result = await query(
             'INSERT INTO menus (name, image_url, base_price, category_id, sub_category_id, dept) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-            [name, image_url, base_price, category_id || null, sub_category_id || null, dept || 'Kitchen']
+            [name, image_url || null, base_price, category_id || null, sub_category_id || null, dept || 'Kitchen']
         );
 
         const newMenu = result.rows[0];
