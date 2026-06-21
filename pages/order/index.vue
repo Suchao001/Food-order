@@ -99,10 +99,25 @@ watch(categories, (newCats) => {
 watch(activeCategory, (newCat) => {
   if (newCat === beverageCategoryId.value) {
     beverageTempFilter.value = 'cold'
+    const coffeeSub = subCategories.value.find((s: any) => s.category_id === beverageCategoryId.value && s.name === 'Coffee')
+    if (coffeeSub) {
+      activeSubCategory.value = coffeeSub.id
+      return
+    }
   }
   // Reset sub-category filter on main category changes
   activeSubCategory.value = 'all'
 })
+
+// Also watch subCategories for when they load after activeCategory is set
+watch(subCategories, (newSubs) => {
+  if (activeCategory.value === beverageCategoryId.value && (activeSubCategory.value === 'all' || !newSubs.some(s => s.id === activeSubCategory.value))) {
+    const coffeeSub = newSubs.find((s: any) => s.category_id === beverageCategoryId.value && s.name === 'Coffee')
+    if (coffeeSub) {
+      activeSubCategory.value = coffeeSub.id
+    }
+  }
+}, { immediate: true })
 
 // Persist the showImages preference
 if (import.meta.client) {
@@ -1076,16 +1091,6 @@ const submitOrder = async () => {
           <div class="flex gap-2 overflow-x-auto min-w-0">
             <template v-if="filteredSubCategories.length > 0">
               <button 
-                @click="activeSubCategory = 'all'"
-                :class="`px-4 py-2 rounded-xl text-xs font-bold border transition-all flex-shrink-0 ${
-                  activeSubCategory === 'all' 
-                    ? 'bg-zinc-800 text-white border-zinc-900 shadow-sm' 
-                    : 'bg-white text-zinc-650 border-zinc-200 hover:bg-zinc-50'
-                }`"
-              >
-                ทั้งหมด
-              </button>
-              <button 
                 v-for="sub in filteredSubCategories"
                 :key="sub.id"
                 @click="activeSubCategory = sub.id"
@@ -1096,6 +1101,16 @@ const submitOrder = async () => {
                 }`"
               >
                 {{ sub.name }}
+              </button>
+              <button 
+                @click="activeSubCategory = 'all'"
+                :class="`px-4 py-2 rounded-xl text-xs font-bold border transition-all flex-shrink-0 ${
+                  activeSubCategory === 'all' 
+                    ? 'bg-zinc-800 text-white border-zinc-900 shadow-sm' 
+                    : 'bg-white text-zinc-650 border-zinc-200 hover:bg-zinc-50'
+                }`"
+              >
+                ทั้งหมด
               </button>
             </template>
           </div>
