@@ -42,7 +42,7 @@ export default defineEventHandler(async (event) => {
                         item.totalPrice,
                         item.isTakeaway || false,
                         item.isSpecial || false,
-                        item.proteinType || 'หมู',
+                        item.proteinType || null,
                         item.discount || 0
                     ]
                 )

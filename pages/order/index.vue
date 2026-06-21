@@ -809,6 +809,7 @@ const printActiveOrderReceipt = (order: any) => {
         }
     })
 
+    const isFood = menu ? menu.dept === 'Kitchen' : false
     return {
         menuId: item.menu_id,
         menuName: item.menu_name,
@@ -819,7 +820,7 @@ const printActiveOrderReceipt = (order: any) => {
         isTakeaway: !!item.is_takeaway,
         isSpecial: !!item.is_special,
         notes: item.notes || '',
-        proteinType: item.protein_type || '',
+        proteinType: isFood ? (item.protein_type || '') : '',
         categoryId,
         discount: discountVal
     }
@@ -1445,8 +1446,8 @@ const submitOrder = async () => {
                     
                     <!-- Print config detail options -->
                     <div class="flex flex-wrap gap-1.5 mt-1 text-[11px] font-sans">
-                      <span v-if="item.proteinType" class="bg-zinc-100 text-zinc-700 px-1.5 py-0.5 rounded font-semibold text-[10px]">
-                        🥩 {{ item.proteinType }}{{ item.isSpecial ? ' (พิเศษ)' : '' }}
+                      <span v-if="item.proteinType && item.proteinType !== ''" class="bg-zinc-100 text-zinc-700 px-1.5 py-0.5 rounded font-semibold text-[10px]">
+                        {{ item.proteinType }}{{ item.isSpecial ? ' (พิเศษ)' : '' }}
                       </span>
                       <span v-for="opt in item.selectedOptions" :key="opt.optionId" class="bg-orange-50 text-orange-700 px-1.5 py-0.5 rounded border border-orange-200 text-[10px]">
                         + {{ opt.label }}
@@ -1555,8 +1556,8 @@ const submitOrder = async () => {
                     <span class="font-bold text-zinc-900">{{ item.menu_name }}</span>
                     <span class="text-zinc-505 font-bold ml-1">x{{ item.quantity }}</span>
                     <div class="pl-2 text-[10px] text-zinc-505 font-sans flex flex-wrap gap-1 mt-0.5">
-                      <span v-if="item.protein_type" class="bg-zinc-100 text-zinc-700 px-1.5 py-0.5 rounded text-[9px] font-semibold">
-                        🥩 {{ item.protein_type }}{{ item.is_special ? ' (พิเศษ)' : '' }}{{ item.is_takeaway ? ' (กล่อง)' : '' }}
+                      <span v-if="item.protein_type && item.menu_dept === 'Kitchen'" class="bg-zinc-100 text-zinc-700 px-1.5 py-0.5 rounded text-[9px] font-semibold">
+                        {{ item.protein_type }}{{ item.is_special ? ' (พิเศษ)' : '' }}{{ item.is_takeaway ? ' (กล่อง)' : '' }}
                       </span>
                       <span v-for="opt in item.options" :key="opt.option_id" class="bg-orange-50 text-orange-700 px-1.5 py-0.5 rounded text-[9px] font-semibold border border-orange-200">
                         + {{ opt.label }}
@@ -1649,7 +1650,7 @@ const submitOrder = async () => {
                     <span class="w-[25%] text-right">฿{{ item.totalPrice * item.quantity }}</span>
                   </div>
                   <div class="pl-2 text-[10px] text-zinc-650 font-mono">
-                    <span v-if="item.proteinType">🥩 {{ item.proteinType }}{{ item.isSpecial ? ' (พิเศษ)' : '' }}</span>
+                    <span v-if="item.proteinType && item.proteinType !== ''">{{ item.proteinType }}{{ item.isSpecial ? ' (พิเศษ)' : '' }}</span>
                     <div v-for="opt in item.selectedOptions" :key="opt.optionId">
                       + {{ opt.label }}
                     </div>
@@ -1725,7 +1726,7 @@ const submitOrder = async () => {
               <span class="w-[25%] text-right">฿{{ item.totalPrice * item.quantity }}</span>
             </div>
             <div class="pl-2 text-[10px] text-gray-800">
-              <span v-if="item.proteinType">🥩 {{ item.proteinType }}{{ item.isSpecial ? ' (พิเศษ)' : '' }}</span>
+              <span v-if="item.proteinType && item.proteinType !== ''">{{ item.proteinType }}{{ item.isSpecial ? ' (พิเศษ)' : '' }}</span>
               <div v-for="opt in item.selectedOptions" :key="opt.optionId">
                 + {{ opt.label }}
               </div>
