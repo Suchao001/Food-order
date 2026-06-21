@@ -799,28 +799,6 @@ const addActiveToCart = () => {
 }
 
 // Play pleasant high-quality audio beep on drop
-const playAddSound = () => {
-  try {
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
-    const oscillator = audioContext.createOscillator()
-    const gainNode = audioContext.createGain()
-    
-    oscillator.connect(gainNode)
-    gainNode.connect(audioContext.destination)
-    
-    oscillator.type = 'sine'
-    oscillator.frequency.setValueAtTime(600, audioContext.currentTime)
-    oscillator.frequency.exponentialRampToValueAtTime(1000, audioContext.currentTime + 0.15)
-    
-    gainNode.gain.setValueAtTime(0.15, audioContext.currentTime)
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15)
-    
-    oscillator.start()
-    oscillator.stop(audioContext.currentTime + 0.15)
-  } catch (err) {
-    console.log('Audio not supported or blocked')
-  }
-}
 
 // Add menu item directly to cart with default options (for drag-and-drop bypass)
 const addMenuToCartDirectly = (menu: any) => {
@@ -929,7 +907,6 @@ const onDrop = (e: DragEvent) => {
     addMenuToCartDirectly(draggedMenu.value)
     selectedMenu.value = null
     activeTab.value = 'cart'
-    playAddSound()
     draggedMenu.value = null
   }
 }
@@ -999,7 +976,6 @@ const onTouchEnd = (e: TouchEvent) => {
     addMenuToCartDirectly(touchDragMenu)
     selectedMenu.value = null
     activeTab.value = 'cart'
-    playAddSound()
   }
 
   isDraggingOverCart.value = false
