@@ -151,7 +151,7 @@ watch(selectedMenu, (newVal) => {
   }
 })
 
-const editCartItemConfig = async (item: CartItem) => {
+const editCartItemConfig = (item: CartItem) => {
   // Find the menu object from allMenus
   const menu = allMenus.value.find((m: any) => m.id === item.menuId)
   if (!menu) return
@@ -175,49 +175,42 @@ const editCartItemConfig = async (item: CartItem) => {
 
   editingCartItem.value = item
 
-  activeOptionsPending.value = true
-  try {
-    const response = await $fetch<{ success: boolean, data: any[] }>(`/api/menus/${item.menuId}/options`)
-    let menuOpts: any[] = []
-    if (response.success) {
-      menuOpts = response.data.filter((o: any) => !(o.option_group === 'temperature' && o.label === 'ปั่น'))
-    }
-    
-    activeItemOptions.value = menuOpts
-
-    // Pre-select options that were saved on the cart item
-    item.selectedOptions.forEach(opt => {
-      const optionInfo = activeItemOptions.value.find(o => o.id === opt.optionId)
-      if (optionInfo) {
-        if (['temperature', 'sweetness', 'milk_type'].includes(optionInfo.option_group)) {
-          selectedSingleOptionsState[optionInfo.option_group] = opt.optionId
-        } else if (optionInfo.option_group === 'addons') {
-          selectedOptionsState[opt.optionId] = true
-        }
-      }
-    })
-
-    // If any group doesn't have a selection, select defaults
-    const groups = ['temperature', 'sweetness', 'milk_type']
-    groups.forEach(g => {
-      if (selectedSingleOptionsState[g] === undefined) {
-        const opts = activeItemOptions.value.filter(o => o.option_group === g)
-        if (opts.length > 0) {
-          if (g === 'temperature' && menu.preSelectedTempOptionId) {
-            selectedSingleOptionsState[g] = menu.preSelectedTempOptionId
-          } else {
-            const defaultOpt = opts.find(o => Number(o.extra_price) === 0) || opts[0]
-            selectedSingleOptionsState[g] = defaultOpt.id
-          }
-        }
-      }
-    })
-
-  } catch (error) {
-    console.error('Failed to load menu options for editing:', error)
-  } finally {
-    activeOptionsPending.value = false
+  activeOptionsPending.value = false
+  
+  let menuOpts: any[] = []
+  if (menu.options && Array.isArray(menu.options)) {
+    menuOpts = menu.options.filter((o: any) => !(o.option_group === 'temperature' && o.label === 'ปั่น'))
   }
+  
+  activeItemOptions.value = menuOpts
+
+  // Pre-select options that were saved on the cart item
+  item.selectedOptions.forEach(opt => {
+    const optionInfo = activeItemOptions.value.find(o => o.id === opt.optionId)
+    if (optionInfo) {
+      if (['temperature', 'sweetness', 'milk_type'].includes(optionInfo.option_group)) {
+        selectedSingleOptionsState[optionInfo.option_group] = opt.optionId
+      } else if (optionInfo.option_group === 'addons') {
+        selectedOptionsState[opt.optionId] = true
+      }
+    }
+  })
+
+  // If any group doesn't have a selection, select defaults
+  const groups = ['temperature', 'sweetness', 'milk_type']
+  groups.forEach(g => {
+    if (selectedSingleOptionsState[g] === undefined) {
+      const opts = activeItemOptions.value.filter(o => o.option_group === g)
+      if (opts.length > 0) {
+        if (g === 'temperature' && menu.preSelectedTempOptionId) {
+          selectedSingleOptionsState[g] = menu.preSelectedTempOptionId
+        } else {
+          const defaultOpt = opts.find(o => Number(o.extra_price) === 0) || opts[0]
+          selectedSingleOptionsState[g] = defaultOpt.id
+        }
+      }
+    }
+  })
 }
 
 // Food options presets
@@ -387,7 +380,7 @@ const groupedReceiptData = computed(() => {
 
 // 4. Methods
 // When clicking a menu item on the left panel
-const selectMenu = async (menu: any) => {
+const selectMenu = (menu: any) => {
   selectedMenu.value = menu
   activeQuantity.value = 1
   isTakeaway.value = false
@@ -405,35 +398,29 @@ const selectMenu = async (menu: any) => {
   isCustomDiscount.value = false
   customDiscountInput.value = null
 
-  activeOptionsPending.value = true
-  try {
-    const response = await $fetch<{ success: boolean, data: any[] }>(`/api/menus/${menu.id}/options`)
-    let menuOpts: any[] = []
-    if (response.success) {
-      // Exclude temperature option labeled 'ปั่น'
-      menuOpts = response.data.filter((o: any) => !(o.option_group === 'temperature' && o.label === 'ปั่น'))
-    }
-    
-    activeItemOptions.value = menuOpts
-
-    // Pre-select defaults for radio option groups
-    const groups = ['temperature', 'sweetness', 'milk_type']
-    groups.forEach(g => {
-      const opts = activeItemOptions.value.filter(o => o.option_group === g)
-      if (opts.length > 0) {
-        if (g === 'temperature' && menu.preSelectedTempOptionId) {
-          selectedSingleOptionsState[g] = menu.preSelectedTempOptionId
-        } else {
-          const defaultOpt = opts.find(o => Number(o.extra_price) === 0) || opts[0]
-          selectedSingleOptionsState[g] = defaultOpt.id
-        }
-      }
-    })
-  } catch (error) {
-    console.error('Failed to load menu options:', error)
-  } finally {
-    activeOptionsPending.value = false
+  activeOptionsPending.value = false
+  
+  let menuOpts: any[] = []
+  if (menu.options && Array.isArray(menu.options)) {
+    // Exclude temperature option labeled 'ปั่น'
+    menuOpts = menu.options.filter((o: any) => !(o.option_group === 'temperature' && o.label === 'ปั่น'))
   }
+  
+  activeItemOptions.value = menuOpts
+
+  // Pre-select defaults for radio option groups
+  const groups = ['temperature', 'sweetness', 'milk_type']
+  groups.forEach(g => {
+    const opts = activeItemOptions.value.filter(o => o.option_group === g)
+    if (opts.length > 0) {
+      if (g === 'temperature' && menu.preSelectedTempOptionId) {
+        selectedSingleOptionsState[g] = menu.preSelectedTempOptionId
+      } else {
+        const defaultOpt = opts.find(o => Number(o.extra_price) === 0) || opts[0]
+        selectedSingleOptionsState[g] = defaultOpt.id
+      }
+    }
+  })
 }
 
 // Add configured active item to cart
