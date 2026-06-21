@@ -101,6 +101,11 @@ const toggleShowImages = () => {
   }
 }
 
+// Drag & Drop State
+const draggedMenu = ref<any>(null)
+const isDraggingOverCart = ref(false)
+let dragCounter = 0
+
 // Active item configuration (Modifier Panel)
 const selectedMenu = ref<any>(null)
 const activeItemOptions = ref<any[]>([])
@@ -516,6 +521,142 @@ const addActiveToCart = () => {
   selectedMenu.value = null
 }
 
+// Play pleasant high-quality audio beep on drop
+const playAddSound = () => {
+  try {
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
+    const oscillator = audioContext.createOscillator()
+    const gainNode = audioContext.createGain()
+    
+    oscillator.connect(gainNode)
+    gainNode.connect(audioContext.destination)
+    
+    oscillator.type = 'sine'
+    oscillator.frequency.setValueAtTime(600, audioContext.currentTime)
+    oscillator.frequency.exponentialRampToValueAtTime(1000, audioContext.currentTime + 0.15)
+    
+    gainNode.gain.setValueAtTime(0.15, audioContext.currentTime)
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15)
+    
+    oscillator.start()
+    oscillator.stop(audioContext.currentTime + 0.15)
+  } catch (err) {
+    console.log('Audio not supported or blocked')
+  }
+}
+
+// Add menu item directly to cart with default options (for drag-and-drop bypass)
+const addMenuToCartDirectly = (menu: any) => {
+  const isFood = menu.dept === 'Kitchen'
+  const selectedOpts: any[] = []
+  
+  if (menu.options && Array.isArray(menu.options)) {
+    const groups = ['temperature', 'sweetness', 'milk_type']
+    groups.forEach(g => {
+      const opts = menu.options.filter((o: any) => o.option_group === g && !(g === 'temperature' && o.label === 'ปั่น'))
+      if (opts.length > 0) {
+        let selectedOpt: any = null
+        if (g === 'temperature' && menu.preSelectedTempOptionId) {
+          selectedOpt = opts.find((o: any) => o.id === menu.preSelectedTempOptionId)
+        }
+        if (!selectedOpt) {
+          selectedOpt = opts.find((o: any) => Number(o.extra_price) === 0) || opts[0]
+        }
+        if (selectedOpt) {
+          selectedOpts.push({
+            optionId: selectedOpt.id,
+            quantity: 1,
+            label: selectedOpt.label,
+            extraPrice: Number(selectedOpt.extra_price)
+          })
+        }
+      }
+    })
+  }
+
+  let singleItemPrice = Number(menu.base_price_raw !== undefined ? menu.base_price_raw : menu.base_price)
+  selectedOpts.forEach(o => {
+    singleItemPrice += Number(o.extraPrice)
+  })
+
+  const matchingIndex = cart.value.findIndex(item => {
+    if (item.menuId !== menu.id) return false
+    if (item.isTakeaway !== false) return false
+    if (isFood && (item.isSpecial !== false || item.proteinType !== 'หมู')) return false
+    if (item.notes !== '') return false
+    if (item.discount !== 0) return false
+    
+    if (item.selectedOptions.length !== selectedOpts.length) return false
+    const itemOptIds = item.selectedOptions.map(o => o.optionId).sort()
+    const currentOptIds = selectedOpts.map(o => o.optionId).sort()
+    return itemOptIds.every((id, idx) => id === currentOptIds[idx])
+  })
+
+  if (matchingIndex > -1) {
+    cart.value[matchingIndex].quantity += 1
+  } else {
+    cart.value.push({
+      menuId: menu.id,
+      menuName: menu.originalName || menu.name,
+      basePrice: Number(menu.base_price_raw !== undefined ? menu.base_price_raw : menu.base_price),
+      selectedOptions: selectedOpts,
+      totalPrice: singleItemPrice,
+      quantity: 1,
+      isTakeaway: false,
+      isSpecial: false,
+      notes: '',
+      proteinType: isFood ? 'หมู' : '',
+      categoryId: menu.category_id,
+      discount: 0
+    })
+  }
+}
+
+// HTML5 Drag & Drop event handlers
+const onDragStart = (e: DragEvent, menu: any) => {
+  draggedMenu.value = menu
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'copy'
+    e.dataTransfer.setData('text/plain', menu.name)
+  }
+}
+
+const onDragEnd = () => {
+  draggedMenu.value = null
+  isDraggingOverCart.value = false
+}
+
+const onDragEnter = (e: DragEvent) => {
+  dragCounter++
+  isDraggingOverCart.value = true
+}
+
+const onDragLeave = (e: DragEvent) => {
+  dragCounter--
+  if (dragCounter <= 0) {
+    dragCounter = 0
+    isDraggingOverCart.value = false
+  }
+}
+
+const onDragOver = (e: DragEvent) => {
+  if (e.dataTransfer) {
+    e.dataTransfer.dropEffect = 'copy'
+  }
+}
+
+const onDrop = (e: DragEvent) => {
+  dragCounter = 0
+  isDraggingOverCart.value = false
+  if (draggedMenu.value) {
+    addMenuToCartDirectly(draggedMenu.value)
+    selectedMenu.value = null
+    activeTab.value = 'cart'
+    playAddSound()
+    draggedMenu.value = null
+  }
+}
+
 const addQuickNote = (note: string) => {
   if (notes.value) {
     notes.value += ', ' + note
@@ -921,8 +1062,11 @@ const submitOrder = async () => {
             <button 
               v-for="menu in filteredMenus" 
               :key="menu.clientUniqueId"
+              draggable="true"
+              @dragstart="onDragStart($event, menu)"
+              @dragend="onDragEnd"
               @click="selectMenu(menu)"
-              :class="`rounded-2xl border text-left flex active:scale-98 transition-all duration-100 ${
+              :class="`rounded-2xl border text-left flex active:scale-98 transition-all duration-100 cursor-grab active:cursor-grabbing ${
                 showImages ? 'flex-col overflow-hidden h-auto' : 'p-4 flex-col justify-between h-32'
               } ${
                 selectedMenu?.clientUniqueId === menu.clientUniqueId
@@ -986,7 +1130,23 @@ const submitOrder = async () => {
       </main>
 
       <!-- RIGHT PANEL: 35% width (100% in portrait) -->
-      <aside class="w-[35%] portrait:w-full portrait:h-[40%] bg-zinc-100 flex flex-col overflow-hidden min-h-0">
+      <aside 
+        class="w-[35%] portrait:w-full portrait:h-[40%] bg-zinc-100 flex flex-col overflow-hidden min-h-0 relative transition-all duration-200"
+        :class="{ 'ring-4 ring-orange-500 ring-inset bg-orange-50/10': isDraggingOverCart }"
+        @dragover.prevent="onDragOver"
+        @dragenter.prevent="onDragEnter"
+        @dragleave.prevent="onDragLeave"
+        @drop="onDrop($event)"
+      >
+        <!-- Drag & Drop overlay visual indicator -->
+        <div 
+          v-if="isDraggingOverCart"
+          class="absolute inset-0 bg-orange-500/95 flex flex-col items-center justify-center text-white z-50 p-6 pointer-events-none"
+        >
+          <span class="text-5xl mb-3 animate-bounce">🛒</span>
+          <span class="text-xl font-black text-center">วางที่นี่เพื่อใส่บิลโดยตรง</span>
+          <span class="text-sm text-orange-100 text-center mt-1">(พร้อมตัวเลือกเริ่มต้น)</span>
+        </div>
         
         <!-- SECTION 1: Modifier / Options Editor (Full height of the sidebar in landscape, full screen overlay in portrait) -->
         <div 
