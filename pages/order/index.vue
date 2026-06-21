@@ -1244,17 +1244,13 @@ const submitOrder = async () => {
                   <div v-else class="w-full h-full flex items-center justify-center text-2xl">
                     {{ menu.dept === 'Kitchen' ? '🍜' : menu.dept === 'Barista' ? '☕' : '🍰' }}
                   </div>
-                  <!-- Temperature badge overlaid on image -->
+                  <!-- Temperature badge overlaid on image (Minimalist circle) -->
                   <div 
                     v-if="getTempLabelFromName(menu.name)" 
-                    :class="`absolute top-1.5 left-1.5 px-2 py-0.5 rounded-lg text-[9px] font-black uppercase flex items-center gap-1 shadow-sm ${
-                      getTempLabelFromName(menu.name) === 'เย็น' 
-                        ? 'bg-blue-600/90 text-white' 
-                        : 'bg-red-600/90 text-white'
-                    }`"
+                    class="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-white/85 backdrop-blur-sm border border-zinc-200/30 flex items-center justify-center text-[10px] shadow-sm select-none"
+                    :title="getTempLabelFromName(menu.name)"
                   >
-                    <span>{{ getTempLabelFromName(menu.name) === 'เย็น' ? '🧊' : '🔥' }}</span>
-                    <span>{{ getTempLabelFromName(menu.name) }}</span>
+                    {{ getTempLabelFromName(menu.name) === 'เย็น' ? '🧊' : '🔥' }}
                   </div>
                 </div>
                 
@@ -1268,17 +1264,13 @@ const submitOrder = async () => {
               <template v-else>
                 <div class="flex justify-between items-start w-full">
                   <span class="text-2xl">{{ menu.dept === 'Kitchen' ? '🍜' : menu.dept === 'Barista' ? '☕' : '🍰' }}</span>
-                  <!-- Temperature badge in text layout -->
+                  <!-- Temperature badge in text layout (Minimalist circle) -->
                   <div 
                     v-if="getTempLabelFromName(menu.name)" 
-                    :class="`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase flex items-center gap-1 shadow-sm ${
-                      getTempLabelFromName(menu.name) === 'เย็น' 
-                        ? 'bg-blue-600/90 text-white' 
-                        : 'bg-red-600/90 text-white'
-                    }`"
+                    class="w-6 h-6 rounded-full bg-zinc-100 border border-zinc-200 flex items-center justify-center text-[10px] shadow-sm select-none"
+                    :title="getTempLabelFromName(menu.name)"
                   >
-                    <span>{{ getTempLabelFromName(menu.name) === 'เย็น' ? '🧊' : '🔥' }}</span>
-                    <span>{{ getTempLabelFromName(menu.name) }}</span>
+                    {{ getTempLabelFromName(menu.name) === 'เย็น' ? '🧊' : '🔥' }}
                   </div>
                 </div>
                 
