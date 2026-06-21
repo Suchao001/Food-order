@@ -31,6 +31,9 @@
           <NuxtLink to="/admin/options" class="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 font-medium transition-colors">
             🍳 จัดการ Options
           </NuxtLink>
+          <NuxtLink to="/admin/categories" class="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 font-medium transition-colors">
+            📂 จัดการหมวดหมู่
+          </NuxtLink>
           <div class="h-px bg-gray-200 my-3"></div>
           <NuxtLink to="/kitchen" class="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-750 hover:bg-emerald-50 hover:text-emerald-750 font-bold transition-colors">
             👨‍🍳 จอห้องครัว
@@ -91,6 +94,13 @@
             class="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 font-medium border-b border-gray-100"
           >
             🍳 จัดการ Options
+          </NuxtLink>
+          <NuxtLink 
+            to="/admin/categories" 
+            @click="showMobileMenu = false"
+            class="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 font-medium border-b border-gray-100"
+          >
+            📂 จัดการหมวดหมู่
           </NuxtLink>
           <NuxtLink 
             to="/kitchen" 

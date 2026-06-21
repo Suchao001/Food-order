@@ -80,6 +80,13 @@ const beverageCategoryId = computed(() => {
   return bevCat ? bevCat.id : null
 })
 
+// Default to the first category (Beverage) when categories are loaded
+watch(categories, (newCats) => {
+  if (newCats && newCats.length > 0 && activeCategory.value === 'all') {
+    activeCategory.value = newCats[0].id
+  }
+}, { immediate: true })
+
 watch(activeCategory, (newCat) => {
   if (newCat === beverageCategoryId.value) {
     beverageTempFilter.value = 'cold'
@@ -974,17 +981,6 @@ const submitOrder = async () => {
         <!-- Category Selection Tabs (Large touch targets) -->
         <div class="flex p-3 gap-2 bg-white border-b border-zinc-200 overflow-x-auto flex-shrink-0">
           <button 
-            @click="activeCategory = 'all'"
-            :class="`px-5 py-3 rounded-xl font-bold transition-all text-base border ${
-              activeCategory === 'all' 
-                ? 'bg-orange-600 text-white border-orange-700' 
-                : 'bg-zinc-100 text-zinc-700 border-zinc-200 hover:bg-zinc-200'
-            }`"
-          >
-            📂 ทั้งหมด
-          </button>
-          
-          <button 
             v-for="cat in categories" 
             :key="cat.id"
             @click="activeCategory = cat.id"
@@ -996,6 +992,17 @@ const submitOrder = async () => {
           >
             <span>{{ cat.icon }}</span>
             <span>{{ cat.name === 'Food' ? 'อาหาร' : cat.name === 'Beverage' ? 'เครื่องดื่ม' : cat.name === 'Dessert' ? 'ของหวาน' : cat.name }}</span>
+          </button>
+
+          <button 
+            @click="activeCategory = 'all'"
+            :class="`px-5 py-3 rounded-xl font-bold transition-all text-base border ${
+              activeCategory === 'all' 
+                ? 'bg-orange-600 text-white border-orange-700' 
+                : 'bg-zinc-100 text-zinc-700 border-zinc-200 hover:bg-zinc-200'
+            }`"
+          >
+            📂 ทั้งหมด
           </button>
         </div>
 

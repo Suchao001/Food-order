@@ -12,6 +12,9 @@ const menus = computed(() => result.value?.data || [])
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-2xl font-bold text-gray-800">🍜 เมนูทั้งหมด</h1>
       <div class="flex gap-2">
+        <NuxtLink to="/admin/categories" class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors">
+          📂 หมวดหมู่
+        </NuxtLink>
         <NuxtLink to="/admin/options" class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors">
           🍳 Options
         </NuxtLink>
