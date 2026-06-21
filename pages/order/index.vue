@@ -1067,66 +1067,75 @@ const submitOrder = async () => {
           </button>
         </div>
 
-        <!-- Sub-Category Selection Tabs -->
-        <div v-if="filteredSubCategories.length > 0" class="flex px-4 py-2.5 gap-2 bg-zinc-100/30 border-b border-zinc-200 flex-shrink-0 overflow-x-auto">
-          <!-- NOTE: ในอนาคตอาจต้องพิจารณาแยกหมวดหมู่ย่อยตามสถานะร้อน/เย็นเพิ่มเติมด้วย (เช่น กาแฟร้อน vs กาแฟเย็น)
-               เนื่องจากเครื่องดื่มบางรายการมีพฤติกรรมแยกตามประเภทอุณหภูมิโดยเฉพาะ -->
-          <button 
-            @click="activeSubCategory = 'all'"
-            :class="`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
-              activeSubCategory === 'all' 
-                ? 'bg-zinc-800 text-white border-zinc-900 shadow-sm' 
-                : 'bg-white text-zinc-650 border-zinc-200 hover:bg-zinc-50'
-            }`"
-          >
-            ทั้งหมด
-          </button>
-          <button 
-            v-for="sub in filteredSubCategories"
-            :key="sub.id"
-            @click="activeSubCategory = sub.id"
-            :class="`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
-              activeSubCategory === sub.id 
-                ? 'bg-zinc-800 text-white border-zinc-900 shadow-sm' 
-                : 'bg-white text-zinc-650 border-zinc-200 hover:bg-zinc-50'
-            }`"
-          >
-            {{ sub.name }}
-          </button>
-        </div>
+        <!-- Combined Sub-Category & Temperature Selection Row -->
+        <div 
+          v-if="filteredSubCategories.length > 0 || activeCategory === beverageCategoryId" 
+          class="flex items-center justify-between px-4 py-2 bg-zinc-50 border-b border-zinc-200 flex-shrink-0 gap-4"
+        >
+          <!-- Left: Sub-Categories -->
+          <div class="flex gap-2 overflow-x-auto min-w-0">
+            <template v-if="filteredSubCategories.length > 0">
+              <button 
+                @click="activeSubCategory = 'all'"
+                :class="`px-4 py-2 rounded-xl text-xs font-bold border transition-all flex-shrink-0 ${
+                  activeSubCategory === 'all' 
+                    ? 'bg-zinc-800 text-white border-zinc-900 shadow-sm' 
+                    : 'bg-white text-zinc-650 border-zinc-200 hover:bg-zinc-50'
+                }`"
+              >
+                ทั้งหมด
+              </button>
+              <button 
+                v-for="sub in filteredSubCategories"
+                :key="sub.id"
+                @click="activeSubCategory = sub.id"
+                :class="`px-4 py-2 rounded-xl text-xs font-bold border transition-all flex-shrink-0 ${
+                  activeSubCategory === sub.id 
+                    ? 'bg-zinc-800 text-white border-zinc-900 shadow-sm' 
+                    : 'bg-white text-zinc-650 border-zinc-200 hover:bg-zinc-50'
+                }`"
+              >
+                {{ sub.name }}
+              </button>
+            </template>
+          </div>
 
-        <!-- Beverage Temperature Sub-Tabs (Shown only when Beverage category is selected) -->
-        <div v-if="activeCategory === beverageCategoryId" class="flex px-4 py-2 gap-2 bg-zinc-100/50 border-b border-zinc-200 flex-shrink-0 animate-fade-in">
-          <button 
-            @click="beverageTempFilter = 'cold'"
-            :class="`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
-              beverageTempFilter === 'cold' 
-                ? 'bg-blue-600 text-white border-blue-700' 
-                : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50'
-            }`"
+          <!-- Right: Temperature options for beverage -->
+          <div 
+            v-if="activeCategory === beverageCategoryId" 
+            class="flex items-center bg-zinc-200/50 p-0.5 rounded-xl border border-zinc-300 flex-shrink-0"
           >
-            🧊 เมนูเย็น (Cold)
-          </button>
-          <button 
-            @click="beverageTempFilter = 'hot'"
-            :class="`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
-              beverageTempFilter === 'hot' 
-                ? 'bg-orange-600 text-white border-orange-700' 
-                : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50'
-            }`"
-          >
-            ☕ เมนูร้อน (Hot)
-          </button>
-          <button 
-            @click="beverageTempFilter = 'all'"
-            :class="`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
-              beverageTempFilter === 'all' 
-                ? 'bg-zinc-250 text-zinc-800 border-zinc-300' 
-                : 'bg-white text-zinc-600 border-zinc-200'
-            }`"
-          >
-            📂 ทั้งหมด
-          </button>
+            <button 
+              @click="beverageTempFilter = 'cold'"
+              :class="`px-3 py-1.5 rounded-lg text-[10px] font-black tracking-wider uppercase transition-all ${
+                beverageTempFilter === 'cold' 
+                  ? 'bg-blue-600 text-white shadow-sm font-extrabold' 
+                  : 'text-zinc-600 hover:bg-zinc-100'
+              }`"
+            >
+              🧊 เย็น
+            </button>
+            <button 
+              @click="beverageTempFilter = 'hot'"
+              :class="`px-3 py-1.5 rounded-lg text-[10px] font-black tracking-wider uppercase transition-all ${
+                beverageTempFilter === 'hot' 
+                  ? 'bg-orange-600 text-white shadow-sm font-extrabold' 
+                  : 'text-zinc-600 hover:bg-zinc-100'
+              }`"
+            >
+              ☕ ร้อน
+            </button>
+            <button 
+              @click="beverageTempFilter = 'all'"
+              :class="`px-3 py-1.5 rounded-lg text-[10px] font-black tracking-wider uppercase transition-all ${
+                beverageTempFilter === 'all' 
+                  ? 'bg-zinc-700 text-white shadow-sm font-extrabold' 
+                  : 'text-zinc-600 hover:bg-zinc-100'
+              }`"
+            >
+              📂 ทั้งหมด
+            </button>
+          </div>
         </div>
 
         <!-- Menu Cards Grid (Scrollable) -->
@@ -1172,21 +1181,11 @@ const submitOrder = async () => {
                   <div v-else class="w-full h-full flex items-center justify-center text-2xl">
                     {{ menu.dept === 'Kitchen' ? '🍜' : menu.dept === 'Barista' ? '☕' : '🍰' }}
                   </div>
-                  
-                  <!-- Department badge overlay -->
-                  <span :class="`absolute top-1.5 right-1.5 text-[9px] uppercase font-black px-1.5 py-0.5 rounded shadow ${
-                    menu.dept === 'Kitchen' ? 'bg-orange-600 text-white' :
-                    menu.dept === 'Barista' ? 'bg-blue-600 text-white' :
-                    'bg-pink-600 text-white'
-                  }`">
-                    {{ menu.dept === 'Kitchen' ? 'อาหาร' : menu.dept === 'Barista' ? 'บาร์น้ำ' : 'ขนม' }}
-                  </span>
                 </div>
                 
                 <!-- Card details -->
-                <div class="p-2 md:p-2.5 flex-1 flex flex-col justify-between">
+                <div class="p-2 md:p-2.5 flex-1">
                   <h3 class="font-bold text-zinc-900 text-xs md:text-sm leading-snug line-clamp-2">{{ menu.name }}</h3>
-                  <span class="text-orange-600 font-extrabold text-sm md:text-base mt-0.5 block">฿{{ menu.base_price }}</span>
                 </div>
               </template>
 
@@ -1194,18 +1193,10 @@ const submitOrder = async () => {
               <template v-else>
                 <div class="flex justify-between items-start w-full">
                   <span class="text-2xl">{{ menu.dept === 'Kitchen' ? '🍜' : menu.dept === 'Barista' ? '☕' : '🍰' }}</span>
-                  <span :class="`text-[10px] uppercase font-black px-2 py-0.5 rounded ${
-                    menu.dept === 'Kitchen' ? 'bg-orange-100 text-orange-850' :
-                    menu.dept === 'Barista' ? 'bg-blue-100 text-blue-850' :
-                    'bg-pink-100 text-pink-850'
-                  }`">
-                    {{ menu.dept === 'Kitchen' ? 'ครัว' : menu.dept === 'Barista' ? 'บาร์น้ำ' : 'ขนม' }}
-                  </span>
                 </div>
                 
-                <div>
-                  <h3 class="font-bold text-zinc-900 text-sm md:text-base leading-snug line-clamp-2 font-sans">{{ menu.name }}</h3>
-                  <span class="text-orange-600 font-extrabold text-lg mt-1 block">฿{{ menu.base_price }}</span>
+                <div class="mt-2">
+                  <h3 class="font-bold text-zinc-900 text-xs md:text-sm leading-snug line-clamp-2 font-sans">{{ menu.name }}</h3>
                 </div>
               </template>
             </button>
@@ -1534,80 +1525,92 @@ const submitOrder = async () => {
                   class="bg-white p-3.5 rounded-xl border border-zinc-200 flex items-center justify-between gap-3 text-sm animate-fade-in hover:border-zinc-350 hover:bg-zinc-50 cursor-pointer active:scale-[0.99]"
                   @click="editCartItemConfig(item)"
                 >
-                  <div class="flex-1 min-w-0">
-                    <div class="flex items-baseline gap-1.5">
-                      <span class="font-black text-zinc-900 text-sm">{{ item.menuName }}</span>
-                      <span class="text-xs text-zinc-505">x{{ item.quantity }}</span>
+                  <div class="flex flex-col gap-1.5 w-full">
+                    <!-- Name & Price on same line -->
+                    <div class="flex items-baseline justify-between w-full">
+                      <div class="flex items-baseline gap-1.5 min-w-0 flex-1">
+                        <span class="font-black text-zinc-900 text-sm truncate">{{ item.menuName }}</span>
+                        <span class="text-xs text-zinc-400 font-medium">x{{ item.quantity }}</span>
+                      </div>
+                      <span class="font-black text-zinc-900 text-sm ml-2 flex-shrink-0">฿{{ item.totalPrice * item.quantity }}</span>
                     </div>
                     
-                    <!-- Print config detail options -->
-                    <div class="flex flex-wrap gap-1.5 mt-1 text-[11px] font-sans">
-                      <span v-if="item.proteinType && item.proteinType !== ''" class="bg-zinc-100 text-zinc-700 px-1.5 py-0.5 rounded font-semibold text-[10px]">
-                        {{ item.proteinType }}{{ item.isSpecial ? ' (พิเศษ)' : '' }}
-                      </span>
-                      <span v-for="opt in item.selectedOptions" :key="opt.optionId" class="bg-orange-50 text-orange-700 px-1.5 py-0.5 rounded border border-orange-200 text-[10px]">
-                        + {{ opt.label }}
-                      </span>
-                      <span v-if="item.discount > 0" class="bg-green-50 text-green-700 px-1.5 py-0.5 rounded border border-green-200 font-extrabold text-[10px]">
-                        💸 ส่วนลด -฿{{ item.discount }}
-                      </span>
-                      <span v-if="item.notes" class="text-zinc-505 font-medium italic block w-full mt-0.5">
-                        📝 {{ item.notes }}
-                      </span>
-                    </div>
-                  </div>
+                    <!-- Modifiers underneath -->
+                    <div class="flex justify-between items-end w-full gap-2">
+                      <!-- Left: Modifier list -->
+                      <div class="flex flex-col gap-0.5 text-[11px] text-zinc-500 font-sans leading-tight">
+                        <span v-if="item.proteinType && item.proteinType !== ''" class="font-bold text-zinc-650">
+                          • {{ item.proteinType }}{{ item.isSpecial ? ' (พิเศษ)' : '' }}
+                        </span>
+                        <span v-for="opt in item.selectedOptions" :key="opt.optionId">
+                          + {{ opt.label }}
+                        </span>
+                        <span v-if="item.discount > 0" class="text-green-600 font-bold">
+                          💸 ส่วนลด -฿{{ item.discount }}
+                        </span>
+                        <span v-if="item.notes" class="text-zinc-450 italic font-sans block mt-0.5">
+                          📝 {{ item.notes }}
+                        </span>
+                      </div>
 
-                  <!-- Price & Remove button -->
-                  <div class="flex items-center gap-3">
-                    <span class="font-black text-zinc-900">฿{{ item.totalPrice * item.quantity }}</span>
-                    <button 
-                      @click.stop="removeFromCart(item)"
-                      class="text-red-650 hover:bg-red-50 p-1.5 rounded-lg active:scale-90"
-                      title="ลบ"
-                    >
-                      🗑️
-                    </button>
+                      <!-- Right: Trash button (ghost style) -->
+                      <button 
+                        @click.stop="removeFromCart(item)"
+                        class="text-zinc-400 hover:text-red-655 hover:bg-red-50 p-1.5 rounded-lg transition-colors border border-transparent hover:border-red-200 active:scale-90 flex-shrink-0"
+                        title="ลบ"
+                        type="button"
+                      >
+                        🗑️
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
             <!-- Checkout / Action Footer block -->
-            <div v-if="cart.length > 0" class="p-4 bg-zinc-50 border-t border-zinc-200 space-y-3 flex-shrink-0">
-              <!-- Summary Row -->
+            <div v-if="cart.length > 0" class="p-4 bg-zinc-50 border-t border-zinc-200 flex-shrink-0 flex flex-col gap-3 font-sans">
+              <!-- Top: Grand Total and Pay Button (Most Prominent) -->
               <div class="flex items-center justify-between">
-                <input 
-                  v-model="tableNumber"
-                  type="text" 
-                  placeholder="ระบุเบอร์โต๊ะ (ถ้ามี)..."
-                  class="bg-white border border-zinc-300 rounded-xl px-3 py-2 text-zinc-900 w-32 focus:outline-none focus:border-orange-655 focus:ring-1 focus:ring-orange-655 text-xs font-sans font-medium"
-                />
-                <div class="text-right">
-                  <span class="text-zinc-500 block text-[10px] font-sans font-bold">ราคารวมทั้งบิล</span>
-                  <span class="text-2xl font-black text-green-600">฿{{ cartTotalPrice }}</span>
-                </div>
+                <span class="text-sm font-bold text-zinc-650">ยอดรวมทั้งสิ้น</span>
+                <span class="text-2xl font-black text-green-600">฿{{ cartTotalPrice }}</span>
               </div>
 
-              <!-- Confirm Buttons -->
-              <div class="flex gap-2">
-                <button 
-                  @click="clearCart"
-                  class="bg-white hover:bg-zinc-100 text-zinc-700 font-bold py-3.5 px-4 rounded-xl border border-zinc-250 active:scale-95 text-sm font-sans"
-                >
-                  ล้างบิล
-                </button>
+              <!-- Main Green Payment Button -->
+              <button 
+                @click="submitOrder"
+                :disabled="isSubmitting"
+                :class="`w-full text-white font-black py-4 rounded-xl flex items-center justify-center gap-2 active:scale-95 text-lg shadow-md transition-all ${
+                  editingOrderId 
+                    ? 'bg-amber-600 hover:bg-amber-700' 
+                    : 'bg-green-600 hover:bg-green-700'
+                }`"
+              >
+                <span v-if="isSubmitting" class="animate-spin text-sm">⏳</span>
+                <span>{{ editingOrderId ? '💾 บันทึกการแก้ไข' : '✅ ชำระเงิน' }}</span>
+              </button>
+
+              <!-- Divider line -->
+              <div class="border-t border-zinc-250 my-1"></div>
+
+              <!-- Bottom: Secondary Options (Table input & Clear Bill side-by-side) -->
+              <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-1.5 flex-1 min-w-0">
+                  <span class="text-xs text-zinc-500 font-bold whitespace-nowrap">โต๊ะ:</span>
+                  <input 
+                    v-model="tableNumber"
+                    type="text" 
+                    placeholder="ระบุเบอร์โต๊ะ..."
+                    class="flex-1 bg-white border border-zinc-300 rounded-lg px-2.5 py-1.5 text-zinc-900 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-600 text-xs font-semibold"
+                  />
+                </div>
                 
                 <button 
-                  @click="submitOrder"
-                  :disabled="isSubmitting"
-                  :class="`flex-1 disabled:opacity-50 text-white font-black py-3.5 rounded-xl flex items-center justify-center gap-2 active:scale-95 text-base font-sans ${
-                    editingOrderId 
-                      ? 'bg-amber-600 hover:bg-amber-700' 
-                      : 'bg-green-600 hover:bg-green-700'
-                  }`"
+                  @click="clearCart"
+                  class="bg-white hover:bg-zinc-150 text-zinc-500 hover:text-zinc-700 font-bold py-1.5 px-3 rounded-lg border border-zinc-250 active:scale-95 text-xs transition-colors"
+                  type="button"
                 >
-                  <span v-if="isSubmitting" class="animate-spin text-sm">⏳</span>
-                  <span>{{ editingOrderId ? '💾 บันทึกการแก้ไข' : '✅ ยืนยันออร์เดอร์ (ชำระเงิน)' }}</span>
+                  ล้างบิล
                 </button>
               </div>
             </div>
