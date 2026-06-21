@@ -8,9 +8,11 @@ definePageMeta({
 // 1. Data Fetching
 const { data: menuResult, pending: menusPending } = await useFetch<{ success: boolean, data: any[] }>('/api/menus')
 const { data: categoryResult } = await useFetch<{ success: boolean, data: any[] }>('/api/categories')
+const { data: subCategoryResult } = await useFetch<{ success: boolean, data: any[] }>('/api/sub-categories')
 
 const allMenus = computed(() => menuResult.value?.data || [])
 const categories = computed(() => categoryResult.value?.data || [])
+const subCategories = computed(() => subCategoryResult.value?.data || [])
 
 // Compute all menus, but dynamically split beverage items with temperature options
 const processedMenus = computed(() => {
@@ -70,6 +72,7 @@ interface CartItem {
 // 2. State Management
 const cart = ref<CartItem[]>([])
 const activeCategory = ref<number | 'all'>('all')
+const activeSubCategory = ref<number | 'all'>('all')
 const search = ref('')
 const showImages = ref(true)
 
@@ -78,6 +81,12 @@ const beverageTempFilter = ref<'hot' | 'cold' | 'all'>('cold')
 const beverageCategoryId = computed(() => {
   const bevCat = categories.value.find(c => c.name === 'Beverage')
   return bevCat ? bevCat.id : null
+})
+
+// Filtered sub-categories based on selected parent category
+const filteredSubCategories = computed(() => {
+  if (activeCategory.value === 'all') return []
+  return subCategories.value.filter((s: any) => s.category_id === activeCategory.value)
 })
 
 // Default to the first category (Beverage) when categories are loaded
@@ -91,6 +100,8 @@ watch(activeCategory, (newCat) => {
   if (newCat === beverageCategoryId.value) {
     beverageTempFilter.value = 'cold'
   }
+  // Reset sub-category filter on main category changes
+  activeSubCategory.value = 'all'
 })
 
 // Persist the showImages preference
@@ -230,6 +241,13 @@ const filteredMenus = computed(() => {
   
   if (activeCategory.value !== 'all') {
     list = list.filter(m => m.category_id === activeCategory.value)
+    
+    // Apply sub-category filter if set
+    // NOTE: ในอนาคตอาจต้องพิจารณาแยกหมวดหมู่ย่อยตามสถานะร้อน/เย็นเพิ่มเติมด้วย (เช่น กาแฟร้อน vs กาแฟเย็น)
+    // เนื่องจากเครื่องดื่มบางรายการมีพฤติกรรมแยกตามประเภทอุณหภูมิโดยเฉพาะ
+    if (activeSubCategory.value !== 'all') {
+      list = list.filter(m => m.sub_category_id === activeSubCategory.value)
+    }
     
     // Apply temperature filter if viewing Beverages
     if (activeCategory.value === beverageCategoryId.value) {
@@ -1046,6 +1064,34 @@ const submitOrder = async () => {
             }`"
           >
             📂 ทั้งหมด
+          </button>
+        </div>
+
+        <!-- Sub-Category Selection Tabs -->
+        <div v-if="filteredSubCategories.length > 0" class="flex px-4 py-2.5 gap-2 bg-zinc-100/30 border-b border-zinc-200 flex-shrink-0 overflow-x-auto">
+          <!-- NOTE: ในอนาคตอาจต้องพิจารณาแยกหมวดหมู่ย่อยตามสถานะร้อน/เย็นเพิ่มเติมด้วย (เช่น กาแฟร้อน vs กาแฟเย็น)
+               เนื่องจากเครื่องดื่มบางรายการมีพฤติกรรมแยกตามประเภทอุณหภูมิโดยเฉพาะ -->
+          <button 
+            @click="activeSubCategory = 'all'"
+            :class="`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
+              activeSubCategory === 'all' 
+                ? 'bg-zinc-800 text-white border-zinc-900 shadow-sm' 
+                : 'bg-white text-zinc-650 border-zinc-200 hover:bg-zinc-50'
+            }`"
+          >
+            ทั้งหมด
+          </button>
+          <button 
+            v-for="sub in filteredSubCategories"
+            :key="sub.id"
+            @click="activeSubCategory = sub.id"
+            :class="`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
+              activeSubCategory === sub.id 
+                ? 'bg-zinc-800 text-white border-zinc-900 shadow-sm' 
+                : 'bg-white text-zinc-650 border-zinc-200 hover:bg-zinc-50'
+            }`"
+          >
+            {{ sub.name }}
           </button>
         </div>
 

@@ -2,7 +2,7 @@ import { query } from '~/server/utils/db';
 
 export default defineEventHandler(async (event) => {
     const body = await readBody(event);
-    const { name, image_url, base_price, category_id, dept, optionIds } = body;
+    const { name, image_url, base_price, category_id, sub_category_id, dept, optionIds } = body;
 
     if (!name || !image_url || base_price === undefined) {
         throw createError({
@@ -13,8 +13,8 @@ export default defineEventHandler(async (event) => {
 
     try {
         const result = await query(
-            'INSERT INTO menus (name, image_url, base_price, category_id, dept) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-            [name, image_url, base_price, category_id || null, dept || 'Kitchen']
+            'INSERT INTO menus (name, image_url, base_price, category_id, sub_category_id, dept) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+            [name, image_url, base_price, category_id || null, sub_category_id || null, dept || 'Kitchen']
         );
 
         const newMenu = result.rows[0];

@@ -3,7 +3,7 @@ import { query } from '~/server/utils/db';
 export default defineEventHandler(async (event) => {
     const id = getRouterParam(event, 'id');
     const body = await readBody(event);
-    const { name, image_url, base_price, category_id, dept, optionIds } = body;
+    const { name, image_url, base_price, category_id, sub_category_id, dept, optionIds } = body;
 
     if (!id) {
         throw createError({
@@ -14,8 +14,8 @@ export default defineEventHandler(async (event) => {
 
     try {
         const result = await query(
-            'UPDATE menus SET name = $1, image_url = $2, base_price = $3, category_id = $4, dept = $5 WHERE id = $6 RETURNING *',
-            [name, image_url, base_price, category_id || null, dept || 'Kitchen', id]
+            'UPDATE menus SET name = $1, image_url = $2, base_price = $3, category_id = $4, sub_category_id = $5, dept = $6 WHERE id = $7 RETURNING *',
+            [name, image_url, base_price, category_id || null, sub_category_id || null, dept || 'Kitchen', id]
         );
 
         if (result.rows.length === 0) {

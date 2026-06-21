@@ -15,6 +15,7 @@ const form = reactive({
   base_price: '',
   image_url: '',
   category_id: '' as string | number,
+  sub_category_id: '' as string | number,
   dept: 'Kitchen' as 'Kitchen' | 'Barista' | 'Bakery'
 })
 
@@ -22,6 +23,24 @@ const loading = ref(false)
 const uploading = ref(false)
 const message = ref({ type: '', text: '' })
 const fileInput = ref<HTMLInputElement | null>(null)
+
+// Fetch sub-categories
+const { data: subCategoryResult } = await useFetch<{ success: boolean, data: { id: number, category_id: number, name: string }[] }>('/api/sub-categories')
+const allSubCategories = computed(() => subCategoryResult.value?.data || [])
+
+// Filtered sub-categories based on selected category_id
+const filteredSubCategories = computed(() => {
+  if (!form.category_id) return []
+  return allSubCategories.value.filter(sc => sc.category_id === Number(form.category_id))
+})
+
+// Reset sub_category_id when category_id changes (only after initial load)
+let isInitialLoad = true
+watch(() => form.category_id, () => {
+  if (!isInitialLoad) {
+    form.sub_category_id = ''
+  }
+})
 
 // Fetch existing data
 const { data: menuData, error: fetchError } = await useFetch<any>(`/api/menus/${id}`)
@@ -32,7 +51,12 @@ if (menuData.value?.data) {
   form.base_price = data.base_price
   form.image_url = data.image_url
   form.category_id = data.category_id || ''
+  form.sub_category_id = data.sub_category_id || ''
   form.dept = data.dept || 'Kitchen'
+  // Delay disabling initial load flag to let watches settle
+  nextTick(() => {
+    isInitialLoad = false
+  })
 } else if (fetchError.value) {
     message.value = { type: 'error', text: 'Failed to load menu data' }
 }
@@ -115,6 +139,7 @@ async function handleSubmit() {
         base_price: Number(form.base_price),
         image_url: form.image_url,
         category_id: form.category_id ? Number(form.category_id) : null,
+        sub_category_id: form.sub_category_id ? Number(form.sub_category_id) : null,
         dept: form.dept,
         optionIds: activeOptionIds.value
       }
@@ -181,6 +206,20 @@ async function handleDelete() {
         >
           <option v-for="cat in categories" :key="cat.id" :value="cat.id">
             {{ cat.icon }} {{ cat.name === 'Food' ? 'อาหาร (Food)' : cat.name === 'Beverage' ? 'เครื่องดื่ม (Beverage)' : cat.name === 'Dessert' ? 'ของหวาน (Dessert)' : cat.name }}
+          </option>
+        </select>
+      </div>
+
+      <!-- Sub-Category Select -->
+      <div v-if="filteredSubCategories.length > 0">
+        <label class="block text-sm font-medium text-gray-700 mb-1">หมวดหมู่ย่อย (Sub-Category)</label>
+        <select 
+          v-model="form.sub_category_id"
+          class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
+        >
+          <option value="">ไม่มีหมวดหมู่ย่อย</option>
+          <option v-for="sub in filteredSubCategories" :key="sub.id" :value="sub.id">
+            {{ sub.name }}
           </option>
         </select>
       </div>
