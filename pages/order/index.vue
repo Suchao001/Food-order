@@ -730,6 +730,31 @@ const cancelOrder = async (orderId: number) => {
   }
 }
 
+const openDropdownOrderId = ref<number | null>(null)
+
+const toggleOrderDropdown = (orderId: number) => {
+  openDropdownOrderId.value = openDropdownOrderId.value === orderId ? null : orderId
+}
+
+const handleEditFromDropdown = (order: any) => {
+  openDropdownOrderId.value = null
+  editOrder(order)
+}
+
+const handleCancelFromDropdown = (orderId: number) => {
+  openDropdownOrderId.value = null
+  cancelOrder(orderId)
+}
+
+if (import.meta.client) {
+  document.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement
+    if (!target.closest('.meatball-container')) {
+      openDropdownOrderId.value = null
+    }
+  })
+}
+
 const editOrder = (order: any) => {
   editingOrderId.value = order.id
   
@@ -1561,18 +1586,42 @@ const submitOrder = async () => {
                     : 'border-zinc-200'
                 }`"
               >
-                <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center justify-between mb-2 relative meatball-container">
                   <span class="font-extrabold text-zinc-900 flex items-center gap-1.5">
                     <span>#{{ order.id }}</span>
                     <span class="text-xs text-zinc-505 font-normal">({{ order.location || 'POS หน้าร้าน' }})</span>
                   </span>
-                  <span :class="`text-[10px] px-2.5 py-1 rounded-full font-extrabold uppercase border ${
-                    order.status === 'Pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                    order.status === 'Cooking' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                    'bg-green-50 text-green-700 border-green-200'
-                  }`">
-                    {{ order.status === 'Pending' ? 'รอทำ' : order.status === 'Cooking' ? 'กำลังปรุง' : 'เสร็จแล้ว' }}
-                  </span>
+                  
+                  <!-- Meatball Menu (Dropdown) -->
+                  <div class="relative">
+                    <button 
+                      @click.stop="toggleOrderDropdown(order.id)"
+                      class="p-1 hover:bg-zinc-100 rounded-lg text-zinc-500 hover:text-zinc-700 transition-colors active:scale-95"
+                      title="เมนูเพิ่มเติม"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                      </svg>
+                    </button>
+                    
+                    <div 
+                      v-if="openDropdownOrderId === order.id" 
+                      class="absolute right-0 mt-1 w-36 bg-white border border-zinc-200 rounded-xl shadow-lg z-50 py-1"
+                    >
+                      <button 
+                        @click.stop="handleEditFromDropdown(order)"
+                        class="w-full text-left px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 flex items-center gap-1.5"
+                      >
+                        ✏️ แก้ไข/เพิ่ม
+                      </button>
+                      <button 
+                        @click.stop="handleCancelFromDropdown(order.id)"
+                        class="w-full text-left px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 flex items-center gap-1.5 border-t border-zinc-100"
+                      >
+                        ❌ ยกเลิกออเดอร์
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- Order Items list -->
@@ -1599,35 +1648,21 @@ const submitOrder = async () => {
                   <span class="font-mono text-zinc-400">{{ formatOrderTime(order.created_at) }}</span>
                 </div>
 
-                <!-- Actions buttons -->
+                <!-- Actions buttons (Archive and Receipt) -->
                 <div class="grid grid-cols-2 gap-1.5">
                   <button 
-                    @click="editOrder(order)"
-                    class="bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-extrabold py-2 px-1 rounded-xl active:scale-95 text-center"
-                    title="แก้ไขหรือเพิ่มรายการอาหาร"
-                  >
-                    ✏️ แก้ไข/เพิ่ม
-                  </button>
-                  <button 
-                    @click="printActiveOrderReceipt(order)"
-                    class="bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-250 text-[11px] font-extrabold py-2 px-1 rounded-xl active:scale-95 text-center"
-                    title="พิมพ์ใบเสร็จออเดอร์นี้"
-                  >
-                    🖨️ ใบเสร็จ
-                  </button>
-                  <button 
                     @click="archiveOrder(order.id)"
-                    class="bg-green-600 hover:bg-green-700 text-white text-[11px] font-extrabold py-2 px-1 rounded-xl active:scale-95 text-center"
+                    class="bg-green-600 hover:bg-green-700 text-white text-xs font-extrabold py-2 px-1 rounded-xl active:scale-95 text-center flex items-center justify-center gap-1"
                     title="เก็บประวัติออเดอร์นี้"
                   >
                     📥 เก็บ (Archive)
                   </button>
                   <button 
-                    @click="cancelOrder(order.id)"
-                    class="bg-red-600 hover:bg-red-700 text-white text-[11px] font-extrabold py-2 px-1 rounded-xl active:scale-95 text-center"
-                    title="ยกเลิกออเดอร์นี้"
+                    @click="printActiveOrderReceipt(order)"
+                    class="bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-250 text-xs font-extrabold py-2 px-1 rounded-xl active:scale-95 text-center flex items-center justify-center gap-1"
+                    title="พิมพ์ใบเสร็จออเดอร์นี้"
                   >
-                    ❌ ยกเลิกออเดอร์
+                    🖨️ ใบเสร็จ
                   </button>
                 </div>
               </div>
