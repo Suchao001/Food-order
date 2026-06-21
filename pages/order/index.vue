@@ -1005,10 +1005,8 @@ const submitOrder = async () => {
     <header class="bg-white border-b border-zinc-200 px-6 py-4 flex items-center justify-between flex-shrink-0">
       <div class="flex items-center gap-3">
         <NuxtLink to="/" class="text-xl hover:opacity-80 transition-opacity">🏠</NuxtLink>
-        <h1 class="text-2xl font-black tracking-tight text-zinc-900 flex items-baseline gap-2">
-          <span>🌲 Mon Phahee Coffee</span>
-          <span class="text-xs font-semibold text-zinc-450 font-sans hidden md:inline">The Hidden Forest & Sea of Mist</span>
-          <span class="text-xs font-bold px-2 py-0.5 bg-zinc-800 rounded text-white uppercase ml-1.5">POS Counter</span>
+        <h1 class="text-2xl font-black tracking-tight text-zinc-900">
+          Cafe POS
         </h1>
       </div>
       
