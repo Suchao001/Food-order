@@ -1005,8 +1005,10 @@ const submitOrder = async () => {
     <header class="bg-white border-b border-zinc-200 px-6 py-4 flex items-center justify-between flex-shrink-0">
       <div class="flex items-center gap-3">
         <NuxtLink to="/" class="text-xl hover:opacity-80 transition-opacity">🏠</NuxtLink>
-        <h1 class="text-2xl font-black tracking-tight text-zinc-900 flex items-center gap-2">
-          🍜 ระบบสั่งอาหาร & คาเฟ่ <span class="text-xs font-bold px-2 py-0.5 bg-orange-600 rounded text-white uppercase">POS Counter</span>
+        <h1 class="text-2xl font-black tracking-tight text-zinc-900 flex items-baseline gap-2">
+          <span>🌲 Mon Phahee Coffee</span>
+          <span class="text-xs font-semibold text-zinc-450 font-sans hidden md:inline">The Hidden Forest & Sea of Mist</span>
+          <span class="text-xs font-bold px-2 py-0.5 bg-zinc-800 rounded text-white uppercase ml-1.5">POS Counter</span>
         </h1>
       </div>
       
@@ -1737,7 +1739,8 @@ const submitOrder = async () => {
           
           <!-- Receipt Paper Slip Preview (White Paper style for visual realism) -->
           <div class="flex-1 overflow-y-auto bg-white text-zinc-900 p-4 rounded-xl font-mono text-xs select-none border border-zinc-300">
-            <div class="text-center font-bold text-sm mb-1">🍜☕ POS Counter</div>
+            <div class="text-center font-bold text-sm mb-0.5">Mon Phahee Coffee</div>
+            <div class="text-center text-[8px] text-zinc-550 mb-1.5 uppercase tracking-wide font-sans">The Hidden Forest & Sea of Mist</div>
             <div class="text-center text-[10px] text-slate-500 mb-2">ใบสั่งสินค้า / ใบเสร็จรับเงิน</div>
             
             <div class="space-y-1 mb-3">
@@ -1810,7 +1813,8 @@ const submitOrder = async () => {
     <!-- PRINT-ONLY RECEIPT ELEMENT (HIDDEN ON SCREEN, VISIBLE ON PRINT) -->
     <div id="receipt-print-area" class="text-black bg-white p-4 font-mono text-sm leading-normal">
       <div v-if="receiptData" class="space-y-2">
-        <div class="text-center font-bold text-lg">🍜☕ POS Counter</div>
+        <div class="text-center font-bold text-lg mb-0.5">Mon Phahee Coffee</div>
+        <div class="text-center text-[9px] text-zinc-600 uppercase tracking-widest mb-1">The Hidden Forest & Sea of Mist</div>
         <div class="text-center text-xs">ใบเสร็จรับเงิน / ใบสั่งเตรียมของ</div>
         <div class="h-2"></div>
         

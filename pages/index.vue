@@ -25,13 +25,16 @@
       <div class="relative z-10 transform transition-all duration-500 group-hover:scale-105">
         <!-- Icon Container -->
         <div class="w-28 h-28 md:w-36 md:h-36 bg-white/20 backdrop-blur-lg rounded-3xl flex items-center justify-center mb-8 mx-auto shadow-2xl border border-white/30 rotate-3 group-hover:rotate-0 transition-transform duration-500">
-          <span class="text-5xl md:text-6xl">🍜☕</span>
+          <span class="text-5xl md:text-6xl">🌲☕</span>
         </div>
         
-        <h1 class="text-4xl md:text-6xl font-black text-white mb-4 tracking-tight drop-shadow-lg">
-          POS Counter
+        <h1 class="text-4xl md:text-6xl font-black text-white mb-2 tracking-tight drop-shadow-lg">
+          Mon Phahee Coffee
         </h1>
-        <p class="text-white/80 text-lg md:text-xl max-w-sm mx-auto font-medium leading-relaxed">
+        <p class="text-orange-200 text-sm md:text-base font-bold tracking-widest uppercase mb-4 drop-shadow">
+          The Hidden Forest & Sea of Mist
+        </p>
+        <p class="text-white/80 text-base md:text-lg max-w-sm mx-auto font-medium leading-relaxed mb-2">
           สั่งอาหารและเครื่องดื่มคาเฟ่จุดเดียวกัน สั่งง่าย รวดเร็ว!
         </p>
         
