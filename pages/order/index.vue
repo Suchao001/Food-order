@@ -263,6 +263,7 @@ const notes = ref('')
 const discountAmount = ref(0) // default to 0 (no discount)
 const isCustomDiscount = ref(false)
 const customDiscountInput = ref<number | null>(null)
+const isDiscountOpen = ref(false) // accordion: hidden by default
 
 const selectDiscountPreset = (preset: number) => {
   isCustomDiscount.value = false
@@ -1724,233 +1725,212 @@ const submitOrder = async () => {
           <span class="text-sm text-orange-100 text-center mt-1">(พร้อมตัวเลือกเริ่มต้น)</span>
         </div>
         
-        <!-- SECTION 1: Modifier / Options Editor (Full height of the sidebar in landscape, full screen overlay in portrait) -->
+        <!-- SECTION 1: Modifier / Options Editor -->
         <div 
           v-if="selectedMenu"
           class="modifier-panel h-full flex flex-col overflow-hidden min-h-0 portrait:fixed portrait:inset-0 portrait:z-50 portrait:w-full portrait:h-full portrait:max-h-screen portrait:bg-white animate-fade-in border-l border-zinc-200 bg-white"
         >
-          <div class="bg-zinc-50 px-4 py-4 flex items-center justify-between border-b border-zinc-200 flex-shrink-0">
-            <h2 class="text-base font-black tracking-wider text-zinc-900 uppercase flex items-center gap-1.5 font-sans">
-              <span>{{ editingCartItem ? '✏️ แก้ไขรายการในตะกร้า' : '⚙️ ปรับแต่งเครื่องดื่ม/อาหาร' }}</span>
-            </h2>
+          <!-- ── Compact Header ────────────────────────────── -->
+          <div class="flex items-center justify-between px-4 py-3 border-b border-zinc-100 bg-white flex-shrink-0">
+            <span class="text-sm font-bold text-zinc-800">
+              {{ editingCartItem ? 'แก้ไขรายการ' : 'ปรับแต่งรายการ' }}
+            </span>
             <button 
               @click="selectedMenu = null" 
-              class="text-sm font-bold text-zinc-700 hover:bg-zinc-100 bg-white px-3.5 py-1.5 rounded-xl active:scale-95 border border-zinc-200 transition-all"
+              class="w-8 h-8 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-600 flex items-center justify-center text-lg leading-none active:scale-90 transition-all"
+              aria-label="ปิด"
             >
-              ✕ ยกเลิก (Cancel)
+              ✕
             </button>
           </div>
 
-          <!-- Loading state for options -->
-          <div v-if="activeOptionsPending" class="flex-1 flex flex-col items-center justify-center py-12">
+          <!-- Loading -->
+          <div v-if="activeOptionsPending" class="flex-1 flex flex-col items-center justify-center">
             <span class="text-2xl animate-spin mb-2">⏳</span>
-            <p class="text-xs text-zinc-505">กำลังโหลดตัวเลือกสำหรับ {{ selectedMenu.name }}...</p>
           </div>
 
-          <!-- Options Editor Container (Scrollable) -->
-          <div v-else class="flex-1 overflow-y-auto p-4 space-y-4">
-            
-            <!-- Item Header -->
-            <div class="bg-zinc-50 p-3.5 rounded-xl border border-zinc-200 flex items-center gap-3">
-              <div class="w-12 h-12 rounded-lg bg-zinc-200 overflow-hidden flex-shrink-0">
+          <!-- ── Scrollable content ────────────────────────── -->
+          <div v-else class="flex-1 overflow-y-auto min-h-0">
+
+            <!-- Product summary strip -->
+            <div class="flex items-center gap-3 px-4 py-3 border-b border-zinc-100">
+              <div class="w-11 h-11 rounded-xl bg-zinc-100 overflow-hidden flex-shrink-0">
                 <img v-if="selectedMenu.image_url" :src="selectedMenu.image_url" class="w-full h-full object-cover">
-                <div v-else class="w-full h-full flex items-center justify-center text-xl">☕</div>
+                <div v-else class="w-full h-full flex items-center justify-center text-lg">{{ selectedMenu.dept === 'Barista' ? '☕' : selectedMenu.dept === 'Kitchen' ? '🍜' : '🍰' }}</div>
               </div>
-              <div class="flex-1">
-                <h3 class="font-black text-zinc-900 text-lg leading-tight">{{ selectedMenu.name }}</h3>
-                <span class="text-xs text-zinc-505 font-medium">ราคาเริ่มต้น ฿{{ selectedMenu.base_price }}</span>
+              <div class="flex-1 min-w-0">
+                <p class="font-bold text-zinc-900 text-sm leading-tight truncate">{{ getDisplayNameWithoutTemp(selectedMenu.name) }}</p>
+                <p class="text-xs text-zinc-400 mt-0.5">ราคาเริ่มต้น ฿{{ selectedMenu.base_price }}</p>
               </div>
             </div>
 
-            <!-- Standard Food Modifiers: Protein & Special (Show ONLY for Food Kitchen items) -->
-            <div v-if="selectedMenu.dept === 'Kitchen'" class="space-y-4">
-              <!-- Protein Selection -->
-              <div>
-                <p class="text-xs font-bold text-zinc-500 mb-2 uppercase tracking-wide">🥩 เลือกเนื้อสัตว์ (Protein)</p>
-                <div class="grid grid-cols-3 gap-2">
+            <!-- ── OPTIONS ──────────────────────────────────── -->
+            <div class="px-4 pt-3 pb-2 space-y-4">
+
+              <!-- Food: Protein -->
+              <div v-if="selectedMenu.dept === 'Kitchen'">
+                <p class="text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-2">เนื้อสัตว์</p>
+                <div class="flex flex-wrap gap-1.5">
                   <button 
-                    v-for="p in proteins" 
-                    :key="p"
+                    v-for="p in proteins" :key="p"
                     @click="selectedProtein = p"
-                    :class="`py-2 rounded-xl text-sm font-semibold border transition-all ${
+                    :class="`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
                       selectedProtein === p 
-                        ? 'border-orange-600 bg-orange-50 text-orange-750 font-bold' 
-                        : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'
+                        ? 'border-orange-500 bg-orange-500 text-white' 
+                        : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300'
                     }`"
-                  >
-                    {{ p }}
-                  </button>
+                  >{{ p }}</button>
                 </div>
               </div>
 
-              <!-- Special Checkbox -->
-              <div class="flex gap-2">
-                <button 
-                  @click="isSpecial = !isSpecial"
-                  :class="`flex-1 py-3 px-4 rounded-xl border text-sm font-bold flex items-center justify-between transition-all ${
-                    isSpecial 
-                      ? 'border-orange-600 bg-orange-50 text-orange-750' 
-                      : 'border-zinc-200 bg-white text-zinc-700'
-                  }`"
-                >
-                  <span>⭐ จานพิเศษ (Special)</span>
-                  <span class="text-xs px-2.5 py-0.5 bg-orange-600 text-white rounded-full font-bold">+฿10</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- Custom Beverage Option Groups (Show if beverage/dessert has linked options) -->
-            <div v-if="activeItemOptions.length > 0" class="space-y-4">
-              <div v-for="(opts, group) in groupedActiveOptions" :key="group" class="space-y-2">
-                <p class="text-xs font-bold text-zinc-500 uppercase tracking-wide font-sans">
-                  {{ groupNameThai(group) }}
-                </p>
-
-                <!-- Temperature, Sweetness, Milk options: Single selection (Radio buttons) -->
-                <div v-if="['temperature', 'sweetness', 'milk_type', 'discount'].includes(group)" class="grid grid-cols-3 gap-2">
-                  <button 
-                    v-for="opt in opts" 
-                    :key="opt.id"
-                    @click="selectedSingleOptionsState[group] = opt.id"
-                    :class="`py-2.5 px-2 rounded-xl border text-center flex flex-col justify-center transition-all ${
-                      selectedSingleOptionsState[group] === opt.id 
-                        ? 'border-orange-600 bg-orange-50 text-orange-750 font-bold' 
-                        : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'
-                    }`"
-                  >
-                    <span class="text-sm font-bold leading-tight">{{ opt.label }}</span>
-                    <span v-if="Number(opt.extra_price) > 0" class="text-[10px] text-orange-600 font-extrabold mt-0.5">+฿{{ opt.extra_price }}</span>
-                    <span v-else-if="Number(opt.extra_price) < 0" class="text-[10px] text-green-600 font-extrabold mt-0.5">-฿{{ Math.abs(Number(opt.extra_price)) }}</span>
-                  </button>
-                </div>
-
-                <!-- Addons options: Multi selection (Checkboxes) -->
-                <div v-else class="grid grid-cols-2 gap-2">
-                  <button 
-                    v-for="opt in opts" 
-                    :key="opt.id"
-                    @click="selectedOptionsState[opt.id] = !selectedOptionsState[opt.id]"
-                    :class="`py-2.5 px-3 rounded-xl border text-left flex items-center justify-between transition-all ${
-                      selectedOptionsState[opt.id] 
-                        ? 'border-orange-600 bg-orange-50 text-orange-750 font-bold' 
-                        : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'
-                    }`"
-                  >
-                    <span class="text-sm">{{ opt.label }}</span>
-                    <span class="text-xs text-orange-600 font-extrabold">
-                      {{ Number(opt.extra_price) > 0 ? `+฿${opt.extra_price}` : 'ฟรี' }}
-                    </span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Notes & Quick presets -->
-            <div class="space-y-2">
-              <p class="text-xs font-bold text-zinc-500 uppercase tracking-wide font-sans">📝 หมายเหตุ ( Notes )</p>
-              <input 
-                v-model="notes"
-                type="text" 
-                placeholder="ระบุเพิ่มเติม เช่น ขมน้อย, หวานธรรมชาติ..."
-                class="w-full bg-white border border-zinc-300 rounded-xl px-4 py-2.5 text-sm text-zinc-900 focus:outline-none focus:border-orange-655 focus:ring-1 focus:ring-orange-655"
-              />
-              <div class="flex flex-wrap gap-1 font-sans">
-                <button 
-                  v-for="qn in quickNotes" 
-                  :key="qn"
-                  type="button"
-                  @click="addQuickNote(qn)"
-                  class="bg-white text-zinc-650 px-2.5 py-1.5 rounded-lg border border-zinc-250 hover:bg-zinc-50 text-xs font-semibold"
-                >
-                  + {{ qn }}
-                </button>
-              </div>
-            </div>
-
-            <!-- Discount Section (Built-in POS feature, applies to all menus) -->
-            <div class="space-y-2 border-t border-zinc-200 pt-4 font-sans">
-              <p class="text-xs font-bold text-zinc-500 uppercase tracking-wide flex items-center justify-between">
-                <span>💸 ส่วนลดราคา (Discount)</span>
-                <span v-if="discountAmount > 0" class="text-green-600 font-black">-฿{{ discountAmount }}</span>
-              </p>
-              
-              <div class="grid grid-cols-3 gap-2">
-                <button
-                  v-for="preset in [0, 10, 20]"
-                  :key="preset"
-                  type="button"
-                  @click="selectDiscountPreset(preset)"
-                  :class="`py-2.5 rounded-xl border text-center transition-all ${
-                    !isCustomDiscount && discountAmount === preset
-                      ? 'border-green-600 bg-green-50 text-green-700 font-bold'
-                      : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'
-                  }`"
-                >
-                  <span class="text-sm font-bold">{{ preset === 0 ? 'ไม่มี' : `${preset} ฿` }}</span>
-                </button>
-              </div>
-
-              <!-- Custom discount option -->
-              <div class="flex items-center gap-2 mt-2">
-                <button
-                  type="button"
-                  @click="enableCustomDiscount"
-                  :class="`py-2.5 px-3 rounded-xl border text-center transition-all flex-shrink-0 text-sm font-bold ${
-                    isCustomDiscount
-                      ? 'border-green-600 bg-green-50 text-green-700'
-                      : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'
-                  }`"
-                >
-                  กำหนดเอง
-                </button>
-                <div class="relative flex-1">
-                  <input
-                    v-model.number="customDiscountInput"
-                    type="number"
-                    min="0"
-                    placeholder="ระบุส่วนลดเอง..."
-                    :disabled="!isCustomDiscount"
-                    @input="handleCustomDiscountInput"
-                    class="w-full bg-white border border-zinc-300 rounded-xl px-4 py-2 text-sm text-zinc-900 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-600 disabled:bg-zinc-100 disabled:text-zinc-400 disabled:cursor-not-allowed"
-                  />
-                  <span class="absolute right-3 top-2.5 text-xs text-zinc-505 font-bold font-mono">บาท (฿)</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Quantity & Add to Bill Box -->
-            <div class="pt-4 border-t border-zinc-200 flex items-center justify-between gap-3">
-              <!-- Stepper -->
-              <div class="flex items-center bg-zinc-50 rounded-xl border border-zinc-200 p-1">
-                <button 
-                  @click="activeQuantity > 1 && activeQuantity--" 
-                  class="w-10 h-10 rounded-lg bg-white border border-zinc-200 hover:bg-zinc-100 text-zinc-800 font-extrabold text-lg flex items-center justify-center"
-                >
-                  －
-                </button>
-                <span class="px-5 text-lg font-black text-zinc-900">{{ activeQuantity }}</span>
-                <button 
-                  @click="activeQuantity++" 
-                  class="w-10 h-10 rounded-lg bg-white border border-zinc-200 hover:bg-zinc-100 text-zinc-800 font-extrabold text-lg flex items-center justify-center"
-                >
-                  ＋
-                </button>
-              </div>
-              
-              <!-- Add button -->
+              <!-- Food: Special -->
               <button 
-                @click="addActiveToCart"
-                :class="`flex-1 text-white font-black py-3.5 px-4 rounded-xl flex items-center justify-between ${
-                  editingCartItem
-                    ? 'bg-amber-600 hover:bg-amber-700'
-                    : 'bg-orange-600 hover:bg-orange-500'
+                v-if="selectedMenu.dept === 'Kitchen'"
+                @click="isSpecial = !isSpecial"
+                :class="`w-full py-2.5 px-4 rounded-xl border text-sm font-semibold flex items-center justify-between transition-all ${
+                  isSpecial 
+                    ? 'border-orange-500 bg-orange-50 text-orange-700' 
+                    : 'border-zinc-200 bg-white text-zinc-600'
                 }`"
               >
-                <span>{{ editingCartItem ? '💾 บันทึกการแก้ไข' : '➕ ใส่บิลนี้' }}</span>
-                <span class="text-orange-100 font-extrabold">฿{{ activeItemTotalPrice }}</span>
+                <span>⭐ จานพิเศษ</span>
+                <span :class="`text-xs px-2 py-0.5 rounded-full font-bold ${ isSpecial ? 'bg-orange-500 text-white' : 'bg-zinc-100 text-zinc-500' }`">+฿10</span>
               </button>
+
+              <!-- Beverage / Dessert option groups (temperature, sweetness, milk, addons) -->
+              <div v-if="activeItemOptions.length > 0" class="space-y-4">
+                <div v-for="(opts, group) in groupedActiveOptions" :key="group">
+
+                  <!-- Label -->
+                  <p class="text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-2">
+                    {{ group === 'temperature' ? 'อุณหภูมิ' : group === 'sweetness' ? 'ความหวาน' : group === 'milk_type' ? 'ประเภทนม' : group === 'addons' ? 'เพิ่มเติม' : group === 'discount' ? 'ส่วนลด (option)' : group }}
+                  </p>
+
+                  <!-- Single-select: pills -->
+                  <div v-if="['temperature','sweetness','milk_type','discount'].includes(group)" class="flex flex-wrap gap-1.5">
+                    <button 
+                      v-for="opt in opts" :key="opt.id"
+                      @click="selectedSingleOptionsState[group] = opt.id"
+                      :class="`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all flex items-center gap-1 ${
+                        selectedSingleOptionsState[group] === opt.id 
+                          ? 'border-orange-500 bg-orange-500 text-white' 
+                          : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300'
+                      }`"
+                    >
+                      <span>{{ opt.label }}</span>
+                      <span v-if="Number(opt.extra_price) > 0" class="opacity-80">+฿{{ opt.extra_price }}</span>
+                      <span v-else-if="Number(opt.extra_price) < 0" class="opacity-80">-฿{{ Math.abs(Number(opt.extra_price)) }}</span>
+                    </button>
+                  </div>
+
+                  <!-- Multi-select addons: pills -->
+                  <div v-else class="flex flex-wrap gap-1.5">
+                    <button 
+                      v-for="opt in opts" :key="opt.id"
+                      @click="selectedOptionsState[opt.id] = !selectedOptionsState[opt.id]"
+                      :class="`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all flex items-center gap-1 ${
+                        selectedOptionsState[opt.id] 
+                          ? 'border-orange-500 bg-orange-50 text-orange-700' 
+                          : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300'
+                      }`"
+                    >
+                      <span>{{ opt.label }}</span>
+                      <span class="opacity-70">{{ Number(opt.extra_price) > 0 ? `+฿${opt.extra_price}` : 'ฟรี' }}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Notes -->
+              <div>
+                <p class="text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-2">หมายเหตุ</p>
+                <input 
+                  v-model="notes"
+                  type="text" 
+                  placeholder="เช่น ขมน้อย, ไม่ใส่น้ำแข็ง..."
+                  class="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-200 transition-all"
+                />
+                <!-- Quick tags -->
+                <p class="text-[10px] text-zinc-400 font-semibold mt-2 mb-1.5">ตัวเลือกยอดนิยม</p>
+                <div class="flex flex-wrap gap-1.5">
+                  <button 
+                    v-for="qn in quickNotes.slice(0, 6)" :key="qn"
+                    @click="addQuickNote(qn)"
+                    class="bg-zinc-50 text-zinc-600 px-2.5 py-1 rounded-lg border border-zinc-200 hover:bg-zinc-100 text-[11px] font-medium transition-all"
+                  >+ {{ qn }}</button>
+                </div>
+              </div>
+
+              <!-- Discount (accordion) -->
+              <div class="border border-zinc-200 rounded-xl overflow-hidden">
+                <button 
+                  @click="isDiscountOpen = !isDiscountOpen"
+                  class="w-full flex items-center justify-between px-3.5 py-2.5 text-sm font-semibold text-zinc-600 hover:bg-zinc-50 transition-all"
+                >
+                  <span class="flex items-center gap-2">
+                    <span>ส่วนลด</span>
+                    <span v-if="discountAmount > 0" class="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-bold">-฿{{ discountAmount }}</span>
+                  </span>
+                  <span class="text-zinc-400 text-xs transition-transform duration-200" :class="isDiscountOpen ? 'rotate-180' : ''">▾</span>
+                </button>
+                <div v-if="isDiscountOpen" class="px-3.5 pb-3 pt-1 space-y-2 border-t border-zinc-100">
+                  <div class="flex gap-2">
+                    <button v-for="preset in [0, 10, 20]" :key="preset"
+                      @click="selectDiscountPreset(preset)"
+                      :class="`flex-1 py-2 rounded-lg border text-xs font-bold transition-all ${
+                        !isCustomDiscount && discountAmount === preset
+                          ? 'border-green-500 bg-green-50 text-green-700'
+                          : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50'
+                      }`"
+                    >{{ preset === 0 ? 'ไม่มี' : `${preset} ฿` }}</button>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <button @click="enableCustomDiscount"
+                      :class="`py-2 px-3 rounded-lg border text-xs font-bold flex-shrink-0 transition-all ${
+                        isCustomDiscount ? 'border-green-500 bg-green-50 text-green-700' : 'border-zinc-200 bg-white text-zinc-600'
+                      }`"
+                    >กำหนดเอง</button>
+                    <div class="relative flex-1">
+                      <input v-model.number="customDiscountInput" type="number" min="0"
+                        placeholder="ระบุส่วนลด..."
+                        :disabled="!isCustomDiscount"
+                        @input="handleCustomDiscountInput"
+                        class="w-full bg-white border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500 disabled:bg-zinc-50 disabled:text-zinc-400"
+                      />
+                      <span class="absolute right-2.5 top-2 text-[10px] text-zinc-400 font-mono">฿</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
             </div>
-            
+          </div>
+
+          <!-- ── Sticky Footer: Qty + CTA ─────────────────── -->
+          <div class="flex-shrink-0 flex items-center gap-3 px-4 py-3 bg-white border-t border-zinc-100">
+            <!-- Quantity stepper -->
+            <div class="flex items-center bg-zinc-100 rounded-xl p-0.5 gap-0.5">
+              <button 
+                @click="activeQuantity > 1 && activeQuantity--"
+                class="w-9 h-9 rounded-lg bg-white border border-zinc-200 hover:bg-zinc-50 text-zinc-800 font-bold text-base flex items-center justify-center active:scale-90 transition-all"
+              >－</button>
+              <span class="px-3 text-sm font-black text-zinc-900 min-w-[2ch] text-center">{{ activeQuantity }}</span>
+              <button 
+                @click="activeQuantity++"
+                class="w-9 h-9 rounded-lg bg-white border border-zinc-200 hover:bg-zinc-50 text-zinc-800 font-bold text-base flex items-center justify-center active:scale-90 transition-all"
+              >＋</button>
+            </div>
+
+            <!-- CTA Button -->
+            <button 
+              @click="addActiveToCart"
+              :class="`flex-1 py-2.5 px-4 rounded-xl font-bold text-sm flex items-center justify-between text-white transition-all active:scale-95 ${
+                editingCartItem ? 'bg-amber-500 hover:bg-amber-600' : 'bg-orange-500 hover:bg-orange-600'
+              }`"
+            >
+              <span>{{ editingCartItem ? 'บันทึก' : 'ใส่บิล' }}</span>
+              <span class="text-white/90 font-extrabold">฿{{ activeItemTotalPrice }}</span>
+            </button>
           </div>
         </div>
 
