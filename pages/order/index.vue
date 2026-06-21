@@ -712,6 +712,24 @@ const archiveOrder = async (orderId: number) => {
   }
 }
 
+const cancelOrder = async (orderId: number) => {
+  if (!confirm(`คุณแน่ใจหรือไม่ว่าต้องการยกเลิกออร์เดอร์ #${orderId}?`)) {
+    return
+  }
+  try {
+    const response = await $fetch<{ success: boolean }>(`/api/orders/${orderId}`, {
+      method: 'PATCH',
+      body: { status: 'Cancelled' }
+    })
+    if (response.success) {
+      await refreshActiveOrders()
+    }
+  } catch (error: any) {
+    console.error('Failed to cancel order:', error)
+    alert('เกิดข้อผิดพลาดในการยกเลิกออร์เดอร์: ' + (error.data?.message || error.message))
+  }
+}
+
 const editOrder = (order: any) => {
   editingOrderId.value = order.id
   
@@ -1546,7 +1564,7 @@ const submitOrder = async () => {
                 <div class="flex items-center justify-between mb-2">
                   <span class="font-extrabold text-zinc-900 flex items-center gap-1.5">
                     <span>#{{ order.id }}</span>
-                    <span class="text-xs text-zinc-505 font-normal">(${order.location || 'POS หน้าร้าน'})</span>
+                    <span class="text-xs text-zinc-505 font-normal">({{ order.location || 'POS หน้าร้าน' }})</span>
                   </span>
                   <span :class="`text-[10px] px-2.5 py-1 rounded-full font-extrabold uppercase border ${
                     order.status === 'Pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
@@ -1582,27 +1600,34 @@ const submitOrder = async () => {
                 </div>
 
                 <!-- Actions buttons -->
-                <div class="grid grid-cols-3 gap-1.5">
-                  <button 
-                    @click="archiveOrder(order.id)"
-                    class="bg-green-600 hover:bg-green-700 text-white text-[11px] font-extrabold py-2 px-1 rounded-xl active:scale-95"
-                    title="เก็บประวัติออเดอร์นี้"
-                  >
-                    📥 เก็บ (Archive)
-                  </button>
+                <div class="grid grid-cols-2 gap-1.5">
                   <button 
                     @click="editOrder(order)"
-                    class="bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-extrabold py-2 px-1 rounded-xl active:scale-95"
+                    class="bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-extrabold py-2 px-1 rounded-xl active:scale-95 text-center"
                     title="แก้ไขหรือเพิ่มรายการอาหาร"
                   >
                     ✏️ แก้ไข/เพิ่ม
                   </button>
                   <button 
                     @click="printActiveOrderReceipt(order)"
-                    class="bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-250 text-[11px] font-extrabold py-2 px-1 rounded-xl active:scale-95"
+                    class="bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-250 text-[11px] font-extrabold py-2 px-1 rounded-xl active:scale-95 text-center"
                     title="พิมพ์ใบเสร็จออเดอร์นี้"
                   >
                     🖨️ ใบเสร็จ
+                  </button>
+                  <button 
+                    @click="archiveOrder(order.id)"
+                    class="bg-green-600 hover:bg-green-700 text-white text-[11px] font-extrabold py-2 px-1 rounded-xl active:scale-95 text-center"
+                    title="เก็บประวัติออเดอร์นี้"
+                  >
+                    📥 เก็บ (Archive)
+                  </button>
+                  <button 
+                    @click="cancelOrder(order.id)"
+                    class="bg-red-600 hover:bg-red-700 text-white text-[11px] font-extrabold py-2 px-1 rounded-xl active:scale-95 text-center"
+                    title="ยกเลิกออเดอร์นี้"
+                  >
+                    ❌ ยกเลิกออเดอร์
                   </button>
                 </div>
               </div>
